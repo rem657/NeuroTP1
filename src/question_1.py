@@ -18,14 +18,13 @@ class FHNModel:
 		self.a = a
 
 	def dVdt(self, V, w, t):
-		return V - (V ** 3) / 3 - w + self.I_inj(t)
+		return V - ((V ** 3) / 3) - w + self.I_inj(t)
 
 	def dwdt(self, V, w):
 		return V + self.a - self.b * w#*self.t
 
 	def dXdt(self, X: np.ndarray, t: float):
 		V, w = X
-
 		dVdt = self.dVdt(V, w, t)
 		dwdt = self.dwdt(V, w)
 		return [dVdt, dwdt]

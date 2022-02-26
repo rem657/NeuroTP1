@@ -9,22 +9,57 @@ from scipy.optimize import fsolve
 from scipy.interpolate import interp1d, LinearNDInterpolator
 
 
-class FHNModel:
+class NeuroneModelDefault:
 	def __init__(
 			self,
-			# t: float = 0.08,
-			b: float = 0.8,
-			a: float = 0.7,
 			t_init: float = 0.0,
 			t_end: float = 500.0,
 			t_inter: float = 0.01,
 			I_inj: callable = lambda t: 0
 	):
 		self.I_inj = I_inj
-		#		self.t = t
+		self.time = np.arange(t_init, t_end, t_inter)  # (t_init, t_end)
+		self.Jacobian = lambda v: np.identity(2)
+
+	def dVdt(self, *args):
+		raise NotImplemented
+
+	def dXdt(self, *args):
+		raise NotImplemented
+
+	def compute_model(self, init_cond: list):
+		return odeint(self.dXdt, init_cond, self.time)
+
+	def get_eigenvalues(self, *args) -> Tuple[np.ndarray, np.ndarray]:
+		eigenval, eigenvect = np.linalg.eig(self.Jacobian(*args))
+		return eigenval, eigenvect
+
+	def get_eigenvalues_at_fixed(self, params: Union[List, float]) -> tuple:
+		list_eigenval = []
+		list_eigenvects = []
+		for potential in params:
+			eigenvals, eigenvects = self.get_eigenvalues(potential)
+			list_eigenval.append(eigenvals)
+			list_eigenvects.append(eigenvects)
+		return list_eigenval, list_eigenvects
+
+
+class FHNModel(NeuroneModelDefault):
+	def __init__(
+			self,
+			t_init: float = 0.0,
+			t_end: float = 500.0,
+			t_inter: float = 0.01,
+			I_inj: callable = lambda t: 0,
+			b: float = 0.8,
+			a: float = 0.7,
+	):
+		super().__init__(t_init, t_end, t_inter, I_inj)
 		self.b = b
 		self.a = a
-		self.time = np.arange(t_init, t_end, t_inter)  # (t_init, t_end)
+		self.Jacobian = lambda v: np.array([
+			[1 - v**2, -1],
+			[1, -self.b]])
 
 	def dVdt(self, V, w, I):
 		return V - ((V ** 3) / 3) - w + I
@@ -38,12 +73,8 @@ class FHNModel:
 		dwdt = self.dwdt(V, w)
 		return [dVdt, dwdt]
 
-	def compute_model(self, v_init: float, w_init: float):
-		init_cond = [
-			v_init,
-			w_init
-		]
-		X: np.ndarray = odeint(self.dXdt, init_cond, self.time)
+	def compute_model(self, init_cond: list):
+		X = super().compute_model(init_cond)
 		V = X[:, 0]
 		m = X[:, 1]
 		h = X[:, 2]
@@ -80,27 +111,30 @@ class FHNModel:
 		Ws = self.nullcline_W(Is, V)
 		return Is, V, Ws
 
-	def get_eigenvalues(self, v):
-		J = np.array([
-			[1 - v ** 2, -1],
-			[1, -self.b],
-		])
-		eigenval, eigenvect = np.linalg.eig(J)
-		return eigenval, eigenvect
-
-	def get_eigenvalues_at_fixed(self, V: List) -> tuple:
-		list_eigenval0 = []
-		list_eigenval1 = []
-		for potential in V:
-			eigenvals, eigenvects = self.get_eigenvalues(potential)
-			list_eigenval0.append(np.real(eigenvals[0]))
-			list_eigenval1.append(np.real(eigenvals[1]))
-		return list_eigenval0, list_eigenval1
+	# def get_eigenvalues(self, v):
+	# 	eigenval, eigenvect = np.linalg.eig(self.Jacobian(v))
+	# 	return eigenval, eigenvect
 
 	def get_fixed_point(self, v_min: float, v_max: float, numtick: int):
 		intersect_i, intersect_v, intersect_w = self.nullcline_intersect(np.linspace(v_min, stop=v_max, num=numtick))
 		intersect_mask = intersect_i >= 0  # & (intersect_i <= i_max)
 		return intersect_i[intersect_mask], intersect_v[intersect_mask], intersect_w[intersect_mask]
+
+	def get_eigenvalues_at_fixed(self, V: list):
+		list_eigenval0 = []
+		list_eigenval1 = []
+		for v in V:
+			eigenval, eigenvects = super().get_eigenvalues(v)
+			list_eigenval0.append(np.real(eigenval[0]))
+			list_eigenval1.append(np.real(eigenval[1]))
+		return list_eigenval0, list_eigenval1
+
+	def compute_bifurcation_from_model(self, v_min: float, v_max: float, numtick: int):
+		i, v, w = self.get_fixed_point(v_min, v_max, numtick)
+		V_I = interp1d(i, v)
+		W_I = interp1d(i, w)
+		eigen0, eigen1 = self.get_eigenvalues_at_fixed(v)
+		return *get_bifurcation_point(i, eigen0, eigen1), V_I, W_I
 
 
 def phaseplane3D(
@@ -213,14 +247,6 @@ def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, li
 	return bifurcation_I, bifurcation_eigen
 
 
-def compute_bifurcation_from_model(model: FHNModel, v_min: float, v_max: float, numtick: int):
-	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
-	V_I = interp1d(i, v)
-	W_I = interp1d(i, w)
-	eigen0, eigen1 = model.get_eigenvalues_at_fixed(v)
-	return *get_bifurcation_point(i, eigen0, eigen1), V_I, W_I
-
-
 def integrate_near_bifurcation(
 		model: FHNModel,
 		figure: go.Figure,
@@ -229,51 +255,59 @@ def integrate_near_bifurcation(
 		numtick: int
 ):
 	di = 0.05
-	bifurcation_I, bifurcation_eigen, stablePointVI, stablePointWI = compute_bifurcation_from_model(model, v_min, v_max, numtick)
-	labels = []
+	bifurcation_I, bifurcation_eigen, stablePointVI, stablePointWI = model.compute_bifurcation_from_model(v_min, v_max, numtick)
 	current_to_integrate = []
-	for bifurcation in np.sort(bifurcation_I):
-		labels.append(f'I = {bifurcation - di:.3f}')
-		current_to_integrate.append(bifurcation - di)
-		integrate_trajectory3D(figure, v_min, v_max, numtick, model, bifurcation - di, visible=False)
-		figure.add_trace(
-			go.Scatter3d(
-				x=stablePointVI(bifurcation - di),
-				y=bifurcation - di,
-				z=stablePointWI(bifurcation - di),
-				marker_color='purple',
-				visible=False,
-			)
+	default_visibility = [False for _ in range(len(bifurcation_I)*12)]
+	default_visibility[:3] = [True, True, True]
+	steps = [
+		dict(
+			method="restyle",
+			args=[
+				{'visible': default_visibility}
+			],
+			label='None',
+			value='None',
 		)
+	]
+	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
+		for j in range(3):
+			current_value = bifurcation + (j-1)*di
+			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
+			current_to_integrate.append(current_value)
+			integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
+			figure.add_trace(
+				go.Scatter3d(
+					x=[stablePointVI(current_value)],
+					y=[current_value],
+					z=[stablePointWI(current_value)],
+					marker_color='purple',
+					visible=False,
+				)
+			)
+			figure_index = 3 + (index * 3 * len(bifurcation_I)) + 2*j
+			visibility_current = [_ for _ in default_visibility]
+			visibility_current[figure_index:figure_index+2] = [True, True]
+			steps.append(
+				dict(
+					method="restyle",
+					label=label,
+					value=current_value,
+					args=[
+						{'visible': visibility_current}
+					]
+				)
+			)
+	# raise Exception
+	sliders = [dict(
+		active=0,
+		pad={"t": 50},
+		steps=steps,
 
-		labels.append(f'bifurcation I = {bifurcation:.3f}')
-		current_to_integrate.append(bifurcation)
-		integrate_trajectory3D(figure, v_min, v_max, numtick, model, bifurcation, visible=False)
-		figure.add_trace(
-			go.Scatter3d(
-				x=stablePointVI(bifurcation),
-				y=bifurcation,
-				z=stablePointWI(bifurcation),
-				marker_color='purple',
-				visible=False,
-			)
-		)
-
-		labels.append(f'I = {bifurcation + di:.3f}')
-		current_to_integrate.append(bifurcation + di)
-		integrate_trajectory3D(figure, v_min, v_max, numtick, model, bifurcation + di, visible=False)
-		figure.add_trace(
-			go.Scatter3d(
-				x=stablePointVI(bifurcation + di),
-				y=bifurcation + di,
-				z=stablePointWI(bifurcation + di),
-				marker_color='purple',
-				visible=False,
-			)
-		)
+	)]
 	figure.update_layout(
-		updatemenu=None #todo
+		sliders=sliders
 	)
+
 
 # Function du devoir
 def display3D_phaseplane(
@@ -300,11 +334,17 @@ def display3D_phaseplane(
 	figure.show()
 
 
-def display_eigenvalues_to_I(v_min: float, v_max: float, numtick: int, save: bool = False):
+def display_eigenvalues_to_I(
+		v_min: float,
+		v_max: float,
+		numtick: int,
+		save: bool = False
+):
 	bifurcation_marker_size = 5
 	model = FHNModel()
 	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
 	eigen0, eigen1 = model.get_eigenvalues_at_fixed(v)
+
 	bifurcation_I, bifurcation_eigen = get_bifurcation_point(i, eigen0, eigen1)
 	figure = go.Figure()
 	figure.add_trace(
@@ -388,7 +428,7 @@ def display_eigenvalues_to_I(v_min: float, v_max: float, numtick: int, save: boo
 if __name__ == '__main__':
 	I = lambda t: 0.5
 	imax = 10
-	vmin = -5
-	vmax = 3
-	# display_eigenvalues_to_I(vmin, vmax, 1000, save=True)
-	display3D_phaseplane(imax, vmin, vmax, save=False)
+	vmin = -4
+	vmax = 4
+	display_eigenvalues_to_I(vmin, vmax, 1000, save=False)
+	# display3D_phaseplane(imax, vmin, vmax, save=True)

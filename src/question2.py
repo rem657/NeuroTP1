@@ -1,5 +1,5 @@
 # -C_m dV_m/dt = g_K(V_M - E_K) + g_Na(V_M - E_Na) + g_L(V_M - E_L)
-from typing import Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import plotly.graph_objects as go
@@ -8,6 +8,8 @@ from plotly.subplots import make_subplots
 # dm/dt = α_m(V)(1 - m) - β_m(V)m
 # dh/dt = α_h(V)(1 - h) - β_h(V)h
 from scipy.integrate import odeint
+from scipy.interpolate import interp1d
+from scipy.optimize import fsolve
 
 from src.NeuroneModelDefault import NeuroneModelDefault
 
@@ -15,7 +17,7 @@ from src.NeuroneModelDefault import NeuroneModelDefault
 class HHModel(NeuroneModelDefault):
 	def __init__(
 			self,
-			I_inj: callable,
+			I_inj: callable = lambda t: 0.0,
 			C_m: float = 1.0,
 			g_Na: float = 120.0,
 			g_K: float = 36.0,
@@ -114,7 +116,7 @@ class HHModel(NeuroneModelDefault):
 		n = X[:, 3]
 		return self.time, V, m, h, n
 
-	def Jacobian(self, X):
+	def Jacobian(self, *X):
 		return np.array([
 			[self.deldV_delVdt(X), self.deldV_delmdt(X), self.deldV_delndt(X), self.deldV_delhdt(X)],
 			[self.deldm_delVdt(X), self.deldm_delmdt(X), 0.0, 0.0],
@@ -191,7 +193,7 @@ class HHModel(NeuroneModelDefault):
 		exp_term = np.exp(-binom / tau)
 		return exp_term / (tau * ((1 + exp_term) ** 2))
 
-	def X_nullcline(self, V, t: float):
+	def X_nullcline_intersect(self, V):
 		gamma_m = self.alpha_m(V) / self.beta_m(V)
 		gamma_h = self.alpha_h(V) / self.beta_h(V)
 		gamma_n = self.alpha_n(V) / self.beta_n(V)
@@ -199,8 +201,13 @@ class HHModel(NeuroneModelDefault):
 		m = gamma_m / (1 + gamma_m)
 		h = gamma_h / (1 + gamma_h)
 		n = gamma_n / (1 + gamma_n)
-		V_nullcline = self.I_inj(t) - self.I_Na(V, m, h) - self.I_K(V, n) - self.I_L(V)
-		return [V_nullcline, m, h, n]
+		I = - self.I_Na(V, m, h) - self.I_K(V, n) - self.I_L(V)
+		return [I, V, m, h, n]
+
+	def get_fixed_point(self, v_min: float, v_max: float, numtick: int):
+		[I, V, m, h, n] = self.X_nullcline_intersect(np.linspace(v_min, stop=v_max, num=numtick))
+		intersect_mask = I >= 0  # & (intersect_i <= i_max)
+		return I[intersect_mask], V[intersect_mask], m[intersect_mask], h[intersect_mask], n[intersect_mask]
 
 
 def display_HHModel(I_inj: callable, t_init: float, t_end: float, t_inter: float):
@@ -293,6 +300,23 @@ def I_steps(current_values: list):
 	return func
 
 
+def get_bifurcation_point(I: List, eigen_values) -> Tuple[list, list]:
+	I_zeros = []
+	for eigenval in eigen_values:
+		ei_sign = np.sign(eigenval)
+		ei_sign_diff = np.diff(ei_sign)
+		if np.allclose(ei_sign_diff, 0.0):
+			continue
+		ei_zeros = np.argwhere(np.abs(ei_sign_diff) > 0.0).squeeze()
+		I_prev, I_next = I[ei_zeros], I[ei_zeros+1]
+		curr_I_zeros_hat = (I_next + I_next) / 2.0
+		func = interp1d(I, eigenval)
+		bifurcation_I = fsolve(func, curr_I_zeros_hat)
+		I_zeros.extend(bifurcation_I.flatten().tolist())
+	bifurcation_eigen = np.zeros_like(I_zeros).tolist()
+	return I_zeros, bifurcation_eigen
+
+
 def display_eigenvalues_to_I(
 		model: NeuroneModelDefault,
 		v_min: float,
@@ -300,33 +324,33 @@ def display_eigenvalues_to_I(
 		numtick: int,
 		i_max: Union[float, None] = None,
 		save: bool = False,
-		save_name: str = "eigenvalues.html"
+		save_name: str = "eigenvalues_HH.html",
+		show=False,
 ):
 	bifurcation_marker_size = 5
-	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
-	eigen0, eigen1 = model.get_eigenvalues_at_fixed(v)
-	bifurcation_I, bifurcation_eigen = get_bifurcation_point(i, eigen0, eigen1)
+	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
+	eigen_values, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)))
+	bifurcation_I, bifurcation_eigen = get_bifurcation_point(I, eigen_values)
+	print(f"{bifurcation_I = }")
 	if i_max is not None:
-		i, eigen0, eigen1 = np.array(i), np.array(eigen0), np.array(eigen1)
-		mask = i <= i_max
-		i, eigen0, eigen1 = i[mask].tolist(), eigen0[mask].tolist(), eigen1[mask].tolist()
+		I, eigen_values = np.array(I), np.array(eigen_values)
+		mask = I <= i_max
+		I = I[mask].tolist()
+		eigen_values_list = []
+		for eigen in eigen_values:
+			eigen_values_list.append(eigen[mask].tolist())
+		eigen_values = eigen_values_list
+
 	figure = go.Figure()
-	figure.add_trace(
-		go.Scatter(
-			x=i,
-			y=eigen0,
-			name='real part eigenvalue 0',
-			mode='lines'
+	for i, eigen in enumerate(eigen_values):
+		figure.add_trace(
+			go.Scatter(
+				x=I,
+				y=eigen,
+				name=f'real part eigenvalue {i}',
+				mode='lines'
+			)
 		)
-	)
-	figure.add_trace(
-		go.Scatter(
-			x=i,
-			y=eigen1,
-			name='real part eigenvalue 1',
-			mode='lines'
-		)
-	)
 	figure.add_trace(
 		go.Scatter(
 			x=bifurcation_I,
@@ -351,6 +375,8 @@ def display_eigenvalues_to_I(
 		)
 	)
 	for index, bifurcation_current in enumerate(bifurcation_I):
+		tailx = bifurcation_current
+		taily = bifurcation_eigen[index] + 0.5
 		if index == 0:
 			figure.add_annotation(
 				text="Bifurcations",
@@ -359,14 +385,11 @@ def display_eigenvalues_to_I(
 				showarrow=True,
 				arrowwidth=1.5,
 				arrowhead=1,
-				ax=bifurcation_current,
-				ay=bifurcation_eigen[index] + 0.5,
+				ax=tailx,
+				ay=taily,
 				ayref='y',
 				axref='x'
-
 			)
-			tailx = bifurcation_current
-			taily = bifurcation_eigen[index] + 0.5
 		else:
 			figure.add_annotation(
 				x=bifurcation_current,
@@ -386,11 +409,103 @@ def display_eigenvalues_to_I(
 	)
 	if save:
 		figure.write_html(save_name)
-	figure.show()
+	if show:
+		figure.show()
+
+
+def display_eigenvalues_phase(
+		model: NeuroneModelDefault,
+		v_min: float,
+		v_max: float,
+		numtick: int,
+		save: bool = False,
+		save_name: str = "eigenvalues_phase_HH.html",
+		show=False,
+):
+	bifurcation_marker_size = 5
+	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
+	eigen_values_re, eigen_values_imag, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)), re_imag=True)
+	bifurcation_I, bifurcation_eigen = get_bifurcation_point(I, eigen_values_re)
+	print(f"{bifurcation_I = }")
+
+	figure = go.Figure()
+	for i, eigen in enumerate(eigen_values_re):
+		figure.add_trace(
+			go.Scatter(
+				x=eigen,
+				y=eigen_values_imag[i],
+				name=f'Eigenvalue {i}',
+				mode='lines'
+			)
+		)
+	# figure.add_trace(
+	# 	go.Scatter(
+	# 		x=bifurcation_I,
+	# 		y=bifurcation_eigen,
+	# 		mode='markers',
+	# 		marker_size=bifurcation_marker_size + 1,
+	# 		marker_color='black',
+	# 		name='highlight',
+	# 		hoverinfo='skip'
+	# 	)
+	#
+	# )
+	# figure.add_trace(
+	# 	go.Scatter(
+	# 		x=bifurcation_I,
+	# 		y=bifurcation_eigen,
+	# 		mode='markers',
+	# 		marker_size=bifurcation_marker_size,
+	# 		marker_color='orange',
+	# 		name='bifurcation',
+	# 		hovertemplate='Current : %{x:.4f}'
+	# 	)
+	# )
+	# tailx = bifurcation_I[0]
+	# taily = bifurcation_eigen[0] + 0.5
+	# for index, bifurcation_current in enumerate(bifurcation_I):
+	# 	if index == 0:
+	# 		figure.add_annotation(
+	# 			text="Bifurcations",
+	# 			x=bifurcation_current,
+	# 			y=bifurcation_eigen[index],
+	# 			showarrow=True,
+	# 			arrowwidth=1.5,
+	# 			arrowhead=1,
+	# 			ax=tailx,
+	# 			ay=taily,
+	# 			ayref='y',
+	# 			axref='x'
+	# 		)
+	# 	else:
+	# 		figure.add_annotation(
+	# 			x=bifurcation_current,
+	# 			y=bifurcation_eigen[index],
+	# 			showarrow=True,
+	# 			arrowwidth=1.5,
+	# 			arrowhead=1,
+	# 			ax=tailx,
+	# 			ay=taily,
+	# 			ayref='y',
+	# 			axref='x'
+	#
+	# 		)
+	figure.update_layout(
+		xaxis=dict(title='Re(Eigenvalue)'),
+		yaxis=dict(title='Imag(Eigenvalue)')
+	)
+	if save:
+		figure.write_html(save_name)
+	if show:
+		figure.show()
 
 
 if __name__ == '__main__':
 	# I = lambda t: 35 * (t > 100) - 35 * (t > 200) + 150 * (t > 300) - 150 * (t > 400)
 	# I = I_stairs(list(range(0, 110, 5)))
-	I = I_steps(list(range(0, 150, 10)))
-	display_HHModel(I, 0, 1800, 0.01)
+	# I = I_steps(list(range(0, 150, 10)))
+	# display_HHModel(I, 0, 1800, 0.01)
+	vmin = -71
+	vmax = -65
+	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
+	display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)

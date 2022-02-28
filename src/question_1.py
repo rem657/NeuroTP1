@@ -5,6 +5,7 @@ import plotly.figure_factory as ff
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d, LinearNDInterpolator
 from NeuroneModelDefault import *
+import seaborn as sns
 
 
 class FHNModel(NeuroneModelDefault):
@@ -20,9 +21,14 @@ class FHNModel(NeuroneModelDefault):
 		super().__init__(t_init, t_end, t_inter)#, I_inj)
 		self.b = b
 		self.a = a
-		self.Jacobian = lambda v: np.array([
-			[1 - v**2, -1],
-			[1, -self.b]])
+
+	def Jacobian(self, v):
+		return np.array(
+			[
+				[1 - v**2, -1],
+				[1, -self.b]
+			]
+		)
 
 	def dVdt(self, V, w, I):
 		return V - ((V ** 3) / 3) - w + I
@@ -189,15 +195,43 @@ class FHNModel(NeuroneModelDefault):
 
 
 def integrate_trajectory3D(
+		model: FHNModel,
 		figure: go.Figure,
-		numtick: int,
 		initial_conditions: List[tuple],
 		I_to_integrate: float,
+		colorscale='rocket_r',
 		**kwargs,
 ) -> go.Figure:
-	for init_cond in initial_conditions:
-		time, V, W = model.compute_model(init_cond, lambda t: I_to_integrate)
+	palette = sns.color_palette(colorscale, len(initial_conditions))
+	current_func = lambda t: I_to_integrate
+	for index, init_cond in enumerate(initial_conditions):
 
+		time, V, W = model.compute_model(init_cond, current_func)
+		# figure.add_trace(
+		# 	go.Scatter3d(
+		# 		x=[init_cond[0]],
+		# 		y=[I_to_integrate],
+		# 		z=[init_cond[1]],
+		# 		mode='markers',
+		# 		marker_color=palette[index],
+		# 		hovertext='initial condition'
+		# 	)
+		# )
+		figure.add_trace(
+			go.Scatter3d(
+				name=f'I = {I_to_integrate}',
+				x=V,
+				y=[I_to_integrate for _ in V],
+				z=W,
+				mode='lines',
+				line=dict(
+					width=2,
+					color=palette[index]
+				),
+				**kwargs
+			)
+		)
+		return figure
 
 
 def phaseplane3D(
@@ -340,7 +374,10 @@ def integrate_near_bifurcation(
 			current_value = bifurcation + (j-1)*di
 			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
 			current_to_integrate.append(current_value)
-			integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
+			# integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
+			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
+			initial_conditions = [[fixedV+(itera - 1), fixedW+itera*3] for itera in range(5)]
+			integrate_trajectory3D(model, figure, initial_conditions, current_value)
 			figure.add_trace(
 				go.Scatter3d(
 					x=[stablePointVI(current_value)],
@@ -502,5 +539,5 @@ if __name__ == '__main__':
 	model = FHNModel()
 	# model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
 	# model.display_model_solution(None,I)
-	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
-	# display3D_phaseplane(imax, vmin, vmax, save=False)
+	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
+	display3D_phaseplane(imax, vmin, vmax, save=False)

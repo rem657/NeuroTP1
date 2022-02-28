@@ -33,13 +33,15 @@ class NeuroneModelDefault:
 	def get_fixed_point(self, v_min: float, v_max: float, numtick: int):
 		raise NotImplementedError()
 
-	def get_eigenvalues_at_fixed(self, params: Union[List, float]) -> tuple:
+	def get_eigenvalues_at_fixed(self, params: Union[List, float], re_imag: bool = False) -> tuple:
 		list_eigenval = []
 		list_eigenvects = []
 		for param in params:
 			eigenvals, eigenvects = self.get_eigenvalues(*param)
 			list_eigenval.append(eigenvals)
 			list_eigenvects.append(eigenvects)
+		if re_imag:
+			return list(zip(*np.real(list_eigenval))), list(zip(*np.imag(list_eigenval))), list(zip(*list_eigenvects))
 		return list(zip(*np.real(list_eigenval))), list(zip(*list_eigenvects))
 
 

@@ -268,7 +268,7 @@ def nullclineintersect3D(
 	return figure
 
 
-def _integrate_trajectory3D(
+def integrate_trajectory3D(
 		figure: go.Figure,
 		v_min: float,
 		v_max: float,
@@ -502,7 +502,7 @@ if __name__ == '__main__':
 	vmin = -3.5
 	vmax = 3.5
 	model = FHNModel()
-	# model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
-	# model.display_model_solution(None)
-	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
+	model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
+	model.display_model_solution(None)
+	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
 	display3D_phaseplane(imax, vmin, vmax, save=False)

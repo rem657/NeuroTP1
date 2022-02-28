@@ -7,9 +7,6 @@ from scipy.interpolate import interp1d, LinearNDInterpolator
 from NeuroneModelDefault import *
 
 
-
-
-
 class FHNModel(NeuroneModelDefault):
 	def __init__(
 			self,
@@ -187,20 +184,21 @@ class FHNModel(NeuroneModelDefault):
 			)
 		)
 		if save:
-			figure.write_html('bifurcation.html')
+			figure.write_html('bifurcationFHN.html')
 		figure.show()
 
-	def integrate_trajectory3D(
-			self,
-			figure: go.Figure,
-			v_min: float,
-			v_max: float,
-			numtick: int,
-			I_to_integrate: float,
-			**kwargs,
-	) -> go.Figure:
 
-		model.compute_model()
+def integrate_trajectory3D(
+		figure: go.Figure,
+		numtick: int,
+		initial_conditions: List[tuple],
+		I_to_integrate: float,
+		**kwargs,
+) -> go.Figure:
+	for init_cond in initial_conditions:
+		time, V, W = model.compute_model(init_cond, lambda t: I_to_integrate)
+
+
 
 def phaseplane3D(
 		figure: go.Figure,
@@ -268,7 +266,7 @@ def nullclineintersect3D(
 	return figure
 
 
-def integrate_trajectory3D(
+def _integrate_trajectory3D(
 		figure: go.Figure,
 		v_min: float,
 		v_max: float,
@@ -303,11 +301,12 @@ def integrate_trajectory3D(
 
 
 def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, list]:
+	bifurcation_I = []
 	for eigenval in [eigen0, eigen1]:
 		func = interp1d(I, eigenval)
 		amax_eigen = np.argmax(eigenval)
 		current_max = I[amax_eigen]
-		bifurcation_I = fsolve(func, [current_max - 0.05, current_max + 0.05]).tolist()
+		bifurcation_I += fsolve(func, [current_max - 0.05, current_max + 0.05]).tolist()
 	bifurcation_eigen = [0 for _ in bifurcation_I]
 	return bifurcation_I, bifurcation_eigen
 
@@ -397,7 +396,7 @@ def display3D_phaseplane(
 		)
 	)
 	if save:
-		figure.write_html('FHNModel.html')
+		figure.write_html('PhasePlanFHN.html')
 	figure.show()
 
 
@@ -457,6 +456,8 @@ def display_eigenvalues_to_I(
 			hovertemplate='Current : %{x:.4f}'
 		)
 	)
+	tailx = bifurcation_I[0]
+	taily = bifurcation_eigen[0] + 0.5
 	for index, bifurcation_current in enumerate(bifurcation_I):
 		if index == 0:
 			figure.add_annotation(
@@ -466,14 +467,11 @@ def display_eigenvalues_to_I(
 				showarrow=True,
 				arrowwidth=1.5,
 				arrowhead=1,
-				ax=bifurcation_current,
-				ay=bifurcation_eigen[index] + 0.5,
+				ax=tailx,
+				ay=taily,
 				ayref='y',
 				axref='x'
-
 			)
-			tailx = bifurcation_current
-			taily = bifurcation_eigen[index] + 0.5
 		else:
 			figure.add_annotation(
 				x=bifurcation_current,
@@ -492,7 +490,7 @@ def display_eigenvalues_to_I(
 		yaxis=dict(title='Eigenvalue')
 	)
 	if save:
-		figure.write_html('eigenvalue.html')
+		figure.write_html('eigenvalueFHN.html')
 	figure.show()
 
 
@@ -502,7 +500,7 @@ if __name__ == '__main__':
 	vmin = -3.5
 	vmax = 3.5
 	model = FHNModel()
-	model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
-	model.display_model_solution(None)
+	# model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
+	# model.display_model_solution(None,I)
 	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
-	display3D_phaseplane(imax, vmin, vmax, save=False)
+	# display3D_phaseplane(imax, vmin, vmax, save=False)

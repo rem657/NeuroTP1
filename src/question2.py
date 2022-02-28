@@ -432,9 +432,9 @@ def display_eigenvalues_phase(
 	for i, eigen in enumerate(eigen_values_re):
 		figure.add_trace(
 			go.Scatter(
-				x=eigen_values_imag[i],
-				y=eigen,
-				name=f'real part eigenvalue {i}',
+				x=eigen,
+				y=eigen_values_imag[i],
+				name=f'Eigenvalue {i}',
 				mode='lines'
 			)
 		)
@@ -491,8 +491,8 @@ def display_eigenvalues_phase(
 	#
 	# 		)
 	figure.update_layout(
-		xaxis=dict(title='Imag(Eigenvalue)'),
-		yaxis=dict(title='Re(Eigenvalue)')
+		xaxis=dict(title='Re(Eigenvalue)'),
+		yaxis=dict(title='Imag(Eigenvalue)')
 	)
 	if save:
 		figure.write_html(save_name)
@@ -508,4 +508,4 @@ if __name__ == '__main__':
 	vmin = -71
 	vmax = -65
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
-	display_eigenvalues_phase(HHModel(), vmin, vmax, numtick=10_000, save=True)
+	display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)

@@ -1,12 +1,10 @@
-import scipy as sp
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
+import plotly.graph_objects as go
+from scipy.interpolate import interp1d
 from scipy.optimize import fsolve
-from scipy.interpolate import interp1d, LinearNDInterpolator
+
 from NeuroneModelDefault import *
-
-
-
 
 
 class FHNModel(NeuroneModelDefault):
@@ -22,9 +20,12 @@ class FHNModel(NeuroneModelDefault):
 		super().__init__(t_init, t_end, t_inter, I_inj)
 		self.b = b
 		self.a = a
-		self.Jacobian = lambda v: np.array([
-			[1 - v**2, -1],
-			[1, -self.b]])
+
+	def Jacobian(self, v):
+		return np.array([
+			[1 - v ** 2, -1],
+			[1, -self.b]
+		])
 
 	def dVdt(self, V, w, I):
 		return V - ((V ** 3) / 3) - w + I
@@ -236,7 +237,7 @@ def integrate_near_bifurcation(
 	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
 	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
 	current_to_integrate = []
-	default_visibility = [False for _ in range(len(bifurcation_I)*12)]
+	default_visibility = [False for _ in range(len(bifurcation_I) * 12)]
 	default_visibility[:3] = [True, True, True]
 	steps = [
 		dict(
@@ -250,7 +251,7 @@ def integrate_near_bifurcation(
 	]
 	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
 		for j in range(3):
-			current_value = bifurcation + (j-1)*di
+			current_value = bifurcation + (j - 1) * di
 			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
 			current_to_integrate.append(current_value)
 			integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
@@ -263,9 +264,9 @@ def integrate_near_bifurcation(
 					visible=False,
 				)
 			)
-			figure_index = 3 + (index * 3 * len(bifurcation_I)) + 2*j
+			figure_index = 3 + (index * 3 * len(bifurcation_I)) + 2 * j
 			visibility_current = [_ for _ in default_visibility]
-			visibility_current[figure_index:figure_index+2] = [True, True]
+			visibility_current[figure_index:figure_index + 2] = [True, True]
 			steps.append(
 				dict(
 					method="restyle",
@@ -314,6 +315,7 @@ def display3D_phaseplane(
 
 
 def display_eigenvalues_to_I(
+		model: NeuroneModelDefault,
 		v_min: float,
 		v_max: float,
 		numtick: int,
@@ -321,7 +323,6 @@ def display_eigenvalues_to_I(
 		save: bool = False
 ):
 	bifurcation_marker_size = 5
-	model = FHNModel()
 	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
 	eigen0, eigen1 = model.get_eigenvalues_at_fixed(v)
 	bifurcation_I, bifurcation_eigen = get_bifurcation_point(i, eigen0, eigen1)
@@ -415,5 +416,5 @@ if __name__ == '__main__':
 	vmax = 3.5
 	model = FHNModel(t_end=500, I_inj=I)
 	# model.display_model_solution(None)
-	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
-	# display3D_phaseplane(imax, vmin, vmax, save=False)
+	display_eigenvalues_to_I(FHNModel(), vmin, vmax, 1000, i_max=7, save=False)
+	# display3D_phaseplane(imax, vmin, vmax, save=True)

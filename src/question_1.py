@@ -5,6 +5,7 @@ import plotly.figure_factory as ff
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d, LinearNDInterpolator
 from NeuroneModelDefault import *
+import seaborn as sns
 
 
 class FHNModel(NeuroneModelDefault):
@@ -188,16 +189,141 @@ class FHNModel(NeuroneModelDefault):
 		figure.show()
 
 
+plot_layout = dict(
+	plot_bgcolor='aliceblue',
+	paper_bgcolor="white",
+	xaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	yaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	legend=dict(
+		font=dict(
+			size=17
+		)
+	)
+)
+
+
 def integrate_trajectory3D(
+		model: FHNModel,
 		figure: go.Figure,
-		numtick: int,
 		initial_conditions: List[tuple],
 		I_to_integrate: float,
+		colorscale='crest',
 		**kwargs,
 ) -> go.Figure:
-	for init_cond in initial_conditions:
-		time, V, W = model.compute_model(init_cond, lambda t: I_to_integrate)
+	palette = sns.color_palette(colorscale, len(initial_conditions))
+	current_func = lambda t: I_to_integrate
+	for index, init_cond in enumerate(initial_conditions):
+		time, V, W = model.compute_model(init_cond, current_func)
+		figure.add_trace(
+			go.Scatter3d(
+				x=[init_cond[0]],
+				y=[I_to_integrate],
+				z=[init_cond[1]],
+				mode='markers',
+				marker_color=palette[index],
+				hovertext='initial condition'
+			)
+		)
+		figure.add_trace(
+			go.Scatter3d(
+				name=f'I = {I_to_integrate:.3f} - ({init_cond[0]:.3f}, {init_cond[1]:.3f})',
+				x=V,
+				y=[I_to_integrate for _ in V],
+				z=W,
+				mode='lines',
+				line=dict(
+					width=5,
+					color=f'rgb{palette[index]}'
+				),
+				**kwargs
+			)
+		)
+	return figure
 
+
+def _integrate_trajectory(
+		model: FHNModel,
+		initial_conditions: List[tuple],
+		I_to_integrate: float,
+		colorscale='crest',
+		scatter3D: bool = True,
+		**kwargs,
+) -> Tuple[list, list]:
+	palette = sns.color_palette(colorscale, len(initial_conditions))
+	current_func = lambda t: I_to_integrate
+	list_init_cond_fig = []
+	list_trajectory_fig = []
+	for index, init_cond in enumerate(initial_conditions):
+		time, V, W = model.compute_model(init_cond, current_func)
+		init_cond_dict = dict(
+			type='scatter',
+			x=[init_cond[0]],
+			y=[init_cond[1]],
+			mode='markers',
+			marker=dict(
+				color=f'rgb{palette[index]}',
+				size=8
+			),
+			hovertext='initial condition',
+			name='initial condition',
+			legendgroup=f'({init_cond[0]}, {init_cond[1]})',
+			**kwargs
+		)
+		trajectory_dict = dict(
+			name=f'({init_cond[0]:.3f}, {init_cond[1]:.3f})',
+			type='scatter',
+			x=V,
+			y=W,
+			mode='lines',
+			line=dict(
+				width=2,
+				color=f'rgb{palette[index]}'
+			),
+			legendgroup=f'({init_cond[0]}, {init_cond[1]})',
+			**kwargs
+		)
+		if scatter3D:
+			init_cond_dict['type'] = 'scatter3d'
+			init_cond_dict['z'] = [init_cond[1]]
+			init_cond_dict['y'] = [I_to_integrate]
+
+			trajectory_dict['type'] = 'scatter3d'
+			trajectory_dict['z'] = W
+			trajectory_dict['y'] = [I_to_integrate for _ in V]
+		list_init_cond_fig.append(init_cond_dict)
+		list_trajectory_fig.append(trajectory_dict)
+	return list_init_cond_fig, list_trajectory_fig
+
+
+def integrate_trajectory(
+		model: FHNModel,
+		figure: go.Figure,
+		initial_conditions: List[tuple],
+		I_to_integrate: float,
+		colorscale='crest',
+		scatter3D: bool = True,
+		**kwargs,
+) -> go.Figure:
+	list_init_cond_fig, list_trajectory_fig = _integrate_trajectory(model, initial_conditions, I_to_integrate,
+	                                                                colorscale, scatter3D, **kwargs)
+	figure.add_traces(
+		list_init_cond_fig + list_trajectory_fig
+	)
+	return figure
 
 
 def phaseplane3D(
@@ -266,7 +392,38 @@ def nullclineintersect3D(
 	return figure
 
 
-def _integrate_trajectory3D(
+def phaseplane2D(
+		figure: go.Figure,
+		model: FHNModel,
+		I: float,
+		V: np.ndarray) -> go.Figure:
+	nullV = model.nullcline_V(I, V)
+	nullW = model.nullcline_W(I, V)
+
+	figure.add_trace(
+		go.Scatter(
+			x=V.tolist(), y=nullV.tolist(),
+			name='nullcline V',
+			showlegend=True,
+			mode='lines',
+			marker_color='rgb(30, 144, 255)',
+			line_width=5
+		)
+	)
+	figure.add_trace(
+		go.Scatter(
+			x=V.tolist(), y=nullW.tolist(),
+			name='nullcline W',
+			showlegend=True,
+			mode='lines',
+			marker_color='rgb(255, 127, 14)',
+			line_width=5
+		)
+	)
+	return figure
+
+
+def streamline_trajectories(
 		figure: go.Figure,
 		v_min: float,
 		v_max: float,
@@ -298,6 +455,92 @@ def _integrate_trajectory3D(
 		)
 	)
 	return figure
+
+
+def make_trajectories_near_bifurcation(
+		model: FHNModel,
+		figure: go.Figure,
+):
+	di = 0.01
+	i, v, w = model.get_fixed_point(-2, 2, 500)
+	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
+	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
+	nb_init_cond = 10
+	# default_visibility = [False for _ in range(len(bifurcation_I) * nb_init_cond * 3 * 2)]
+	# default_visibility[:3] = [True, True, True]
+	steps = [
+		# dict(
+		# 	method="restyle",
+		# 	args=[
+		# 		{'visible': default_visibility}
+		# 	],
+		# 	label='None',
+		# 	value='None',
+		# )
+	]
+	nullclineVRange = np.linspace(-4, 4, 500)
+	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
+		for j in range(3):
+			current_value = bifurcation + (j - 1) * di
+			null_v = model.nullcline_V(current_value, nullclineVRange)
+			null_w = model.nullcline_W(current_value, nullclineVRange)
+			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
+			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
+			initial_conditions = [[fixedV + (itera * 1.4 - 2.8), fixedW + (itera * 6 - 12)] for itera in
+			                      range(nb_init_cond - 4)] + \
+			                     [[fixedV + (((-1) ** itera1) * 3.5), fixedW] for itera1 in range(2)] + \
+			                     [[nullclineVRange[indexnull*(-1)], null_w[indexnull*(-1)]] for indexnull in range(2)]
+			init_v, init_w = tuple(zip(*initial_conditions))
+			sorter = np.argsort(init_w)
+			initial_conditions = np.array(initial_conditions)[sorter].tolist()
+			if (index == 0) and (j == 0):
+				phaseplane2D(figure, model, current_value, nullclineVRange)
+				integrate_trajectory(model, figure, initial_conditions, current_value, scatter3D=False)
+				figure.add_trace(
+					go.Scatter(
+						x=[fixedV],
+						y=[fixedW],
+						mode='markers',
+						name='Point fixe',
+						marker=dict(
+							color='purple',
+							size=8
+						)
+					)
+				)
+			list_init_cond_fig, list_trajectory_fig = _integrate_trajectory(model,
+			                                                                initial_conditions,
+			                                                                current_value,
+			                                                                scatter3D=False,
+			                                                                visible=True)
+			all_fig = list_init_cond_fig + list_trajectory_fig
+			# figure_index = 3 + (index * 3 * nb_init_cond * 2) + (nb_init_cond * j * 2)
+			# visibility_current = [_ for _ in default_visibility]
+			# visibility_current[figure_index:figure_index + 2*nb_init_cond] = [True, True]
+			steps.append(
+				dict(
+					method="restyle",
+					label=label,
+					value=current_value,
+					args=[
+						{
+							'x': [nullclineVRange.tolist(), nullclineVRange.tolist()] + [fig['x'] for fig in
+							                                                             all_fig] + [[fixedV]],
+							'y': [null_v.tolist(), null_w.tolist()] + [fig['y'] for fig in all_fig] + [[fixedW]],
+							'name': ['nullcline V', 'nullcline W'] + [fig['name'] for fig in all_fig]+['Point fixe']
+						}
+					]
+				)
+			)
+	sliders = [dict(
+		active=0,
+		pad={"t": 50},
+		steps=steps,
+
+	)]
+	figure.update_layout(
+		sliders=sliders
+	)
 
 
 def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, list]:
@@ -494,6 +737,25 @@ def display_eigenvalues_to_I(
 	figure.show()
 
 
+def display_trajectories(
+		save: bool = False
+):
+	model = FHNModel()
+	figure = go.Figure()
+	make_trajectories_near_bifurcation(model, figure)
+	figure.update_layout(**plot_layout)
+	figure.update_xaxes(
+		title_text='V [mV]',
+		range=[-4, 4]
+	)
+	figure.update_yaxes(
+		title_text='W [-]',
+	)
+	if save:
+		figure.write_html('orbitesFHN.html')
+	figure.show()
+
+
 if __name__ == '__main__':
 	I = lambda t: 0.967
 	imax = 10
@@ -502,5 +764,6 @@ if __name__ == '__main__':
 	model = FHNModel()
 	# model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
 	# model.display_model_solution(None,I)
-	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
+	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)
+	display_trajectories()

@@ -9,9 +9,9 @@ class NeuroneModelDefault:
 			t_init: float = 0.0,
 			t_end: float = 500.0,
 			t_inter: float = 0.01,
-			I_inj: callable = lambda t: 0.0
+			# I_inj: callable = lambda t: 0.0
 	):
-		self.I_inj = I_inj
+		self.I_inj = None
 		self.time = np.arange(t_init, t_end, t_inter)  # (t_init, t_end)
 
 	def Jacobian(self, v):
@@ -23,7 +23,8 @@ class NeuroneModelDefault:
 	def dXdt(self, *args):
 		raise NotImplemented
 
-	def compute_model(self, init_cond: list):
+	def compute_model(self, init_cond: list, current_function: callable):
+		self.I_inj = current_function
 		return odeint(self.dXdt, init_cond, self.time)
 
 	def get_eigenvalues(self, *args) -> Tuple[np.ndarray, np.ndarray]:

@@ -23,8 +23,8 @@ class NeuroneModelDefault:
 	def dXdt(self, *args):
 		raise NotImplemented
 
-	def compute_model(self, init_cond: list, current_func: callable):
-		self.I_inj = current_func
+	def compute_model(self, init_cond: list, current_function: callable):
+		self.I_inj = current_function
 		return odeint(self.dXdt, init_cond, self.time)
 
 	def get_eigenvalues(self, *args) -> Tuple[np.ndarray, np.ndarray]:

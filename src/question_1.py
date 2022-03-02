@@ -18,17 +18,12 @@ class FHNModel(NeuroneModelDefault):
 			b: float = 0.8,
 			a: float = 0.7,
 	):
-		super().__init__(t_init, t_end, t_inter)  # , I_inj)
+		super().__init__(t_init, t_end, t_inter)#, I_inj)
 		self.b = b
 		self.a = a
-
-	def Jacobian(self, v):
-		return np.array(
-			[
-				[1 - v ** 2, -1],
-				[1, -self.b]
-			]
-		)
+		self.Jacobian = lambda v: np.array([
+			[1 - v**2, -1],
+			[1, -self.b]])
 
 	def dVdt(self, V, w, I):
 		return V - ((V ** 3) / 3) - w + I
@@ -52,7 +47,7 @@ class FHNModel(NeuroneModelDefault):
 	def nullcline_V(I: Union[np.ndarray, float], V: Union[np.ndarray, float]):
 		return V - (V ** 3) / 3 + I
 
-	def nullcline_W(self, I: Union[np.ndarray, float], V: np.ndarray):
+	def nullcline_W(self, I: np.ndarray, V: np.ndarray):
 		return (V + self.a) / self.b
 
 	def nullcline_V_3D(self, i, v):
@@ -70,6 +65,10 @@ class FHNModel(NeuroneModelDefault):
 		return i, v, self.nullcline_W_3D(i, v), self.nullcline_V_3D(i, v)
 
 	def nullcline_intersect(self, V):  # nullcline_V, nullcline_W, I, V):
+		# idx = np.argwhere(np.diff(np.sign(nullcline_V - nullcline_W))).flatten()
+		# newI = I.flatten()[idx]
+		# newV = V.flatten()[idx]
+		# return newI, newV, self.nullcline_W(newI, newV)
 		Is = (1 / self.b - 1) * V + (V ** 3) / 3 + self.a / self.b
 		Ws = self.nullcline_W(Is, V)
 		return Is, V, Ws
@@ -129,13 +128,12 @@ class FHNModel(NeuroneModelDefault):
 		return time_integrated, all_V, all_W
 
 	def bifurcation_diagram(self, currents: list, initial_conditions_V, initial_conditions_W):
-		time_integrated, all_V, all_W = self.integrate_multiple_currents(currents, initial_conditions_V,
-		                                                                 initial_conditions_W)
+		time_integrated, all_V, all_W = self.integrate_multiple_currents(currents, initial_conditions_V, initial_conditions_W)
 		min_values = []
 		max_values = []
 		for index in range(len(currents)):
 			v_for_current = all_V[index]
-			last_v = v_for_current[int(len(v_for_current) / 2):]
+			last_v = v_for_current[int(len(v_for_current)/2):]
 			min_values.append(min(last_v))
 			max_values.append(max(last_v))
 		return min_values, max_values
@@ -189,6 +187,33 @@ class FHNModel(NeuroneModelDefault):
 		if save:
 			figure.write_html('bifurcationFHN.html')
 		figure.show()
+
+
+plot_layout = dict(
+	plot_bgcolor='aliceblue',
+	paper_bgcolor="white",
+	xaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	yaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	legend=dict(
+		font=dict(
+			size=17
+		)
+	)
+)
 
 
 def integrate_trajectory3D(
@@ -255,20 +280,20 @@ def _integrate_trajectory(
 			),
 			hovertext='initial condition',
 			name='initial condition',
-			legendgroup=f'{I_to_integrate}-({init_cond[0]}, {init_cond[1]})',
+			legendgroup=f'({init_cond[0]}, {init_cond[1]})',
 			**kwargs
 		)
 		trajectory_dict = dict(
-			name=f'I = {I_to_integrate:.3f} - ({init_cond[0]:.3f}, {init_cond[1]:.3f})',
+			name=f'({init_cond[0]:.3f}, {init_cond[1]:.3f})',
 			type='scatter',
 			x=V,
 			y=W,
 			mode='lines',
 			line=dict(
-				width=3,
+				width=2,
 				color=f'rgb{palette[index]}'
 			),
-			legendgroup=f'{I_to_integrate}-({init_cond[0]}, {init_cond[1]})',
+			legendgroup=f'({init_cond[0]}, {init_cond[1]})',
 			**kwargs
 		)
 		if scatter3D:
@@ -301,114 +326,6 @@ def integrate_trajectory(
 	return figure
 
 
-def make_trajectories_near_bifurcation(
-		model: FHNModel,
-		figure: go.Figure,
-):
-	di = 0.01
-	i, v, w = model.get_fixed_point(-2, 2, 500)
-	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
-	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
-	nb_init_cond = 6
-	# default_visibility = [False for _ in range(len(bifurcation_I) * nb_init_cond * 3 * 2)]
-	# default_visibility[:3] = [True, True, True]
-	steps = [
-		# dict(
-		# 	method="restyle",
-		# 	args=[
-		# 		{'visible': default_visibility}
-		# 	],
-		# 	label='None',
-		# 	value='None',
-		# )
-	]
-	nullclineVRange = np.linspace(-4, 4, 500)
-	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
-		for j in range(3):
-			current_value = bifurcation + (j - 1) * di
-			null_v = model.nullcline_V(current_value, nullclineVRange)
-			null_w = model.nullcline_W(current_value, nullclineVRange)
-			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
-			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
-			initial_conditions = [[fixedV + (itera * 1.5 - 3), fixedW + itera * 3 - 6] for itera in range(nb_init_cond)]
-			if (index == 0) and (j == 0):
-				phaseplane2D(figure, model, current_value, nullclineVRange)
-				figure.add_trace(
-					go.Scatter(
-						x=[fixedV],
-						y=[fixedW],
-						mode='markers',
-						name='Point fixe',
-						marker=dict(
-							color='purple',
-							size=8
-						)
-					)
-				)
-				integrate_trajectory(model, figure, initial_conditions, current_value, scatter3D=False)
-			list_init_cond_fig, list_trajectory_fig = _integrate_trajectory(model,
-			                                                                initial_conditions,
-			                                                                current_value,
-			                                                                scatter3D=False,
-			                                                                visible=True)
-			all_fig = list_init_cond_fig + list_trajectory_fig
-			# figure_index = 3 + (index * 3 * nb_init_cond * 2) + (nb_init_cond * j * 2)
-			# visibility_current = [_ for _ in default_visibility]
-			# visibility_current[figure_index:figure_index + 2*nb_init_cond] = [True, True]
-			steps.append(
-				dict(
-					method="restyle",
-					label=label,
-					value=current_value,
-					args=[
-						{'x': [nullclineVRange.tolist(), nullclineVRange.tolist(), [fixedV]]+[fig['x'] for fig in all_fig],
-						 'y': [null_v.tolist(), null_w.tolist(), [fixedW]]+[fig['y'] for fig in all_fig]
-						 }
-					]
-				)
-			)
-	sliders = [dict(
-		active=0,
-		pad={"t": 50},
-		steps=steps,
-
-	)]
-	figure.update_layout(
-		sliders=sliders
-	)
-
-
-def phaseplane2D(
-		figure: go.Figure,
-		model: FHNModel,
-		I: float,
-		V: np.ndarray) -> go.Figure:
-	nullV = model.nullcline_V(I, V)
-	nullW = model.nullcline_W(I, V)
-
-	figure.add_trace(
-		go.Scatter(
-			x=V.tolist(), y=nullV.tolist(),
-			name='nullcline V',
-			showlegend=True,
-			mode='lines',
-			marker_color='rgb(30, 144, 255)',
-			line_width=5
-		)
-	)
-	figure.add_trace(
-		go.Scatter(
-			x=V.tolist(), y=nullW.tolist(),
-			name='nullcline W',
-			showlegend=True,
-			mode='lines',
-			marker_color='rgb(255, 127, 14)',
-			line_width=5
-		)
-	)
-	return figure
-
-
 def phaseplane3D(
 		figure: go.Figure,
 		model: FHNModel,
@@ -429,7 +346,6 @@ def phaseplane3D(
 			opacity=0.5,
 			name='nullcline V',
 			showscale=False,
-			showlegend=True,
 			cmin=0,
 			cmax=1,
 			colorscale=colorscale,
@@ -442,7 +358,6 @@ def phaseplane3D(
 			opacity=0.5,
 			name='nullcline W',
 			showscale=False,
-			showlegend=True,
 			cmin=0,
 			cmax=1,
 			colorscale=colorscale,
@@ -477,7 +392,38 @@ def nullclineintersect3D(
 	return figure
 
 
-def _integrate_trajectory3D(
+def phaseplane2D(
+		figure: go.Figure,
+		model: FHNModel,
+		I: float,
+		V: np.ndarray) -> go.Figure:
+	nullV = model.nullcline_V(I, V)
+	nullW = model.nullcline_W(I, V)
+
+	figure.add_trace(
+		go.Scatter(
+			x=V.tolist(), y=nullV.tolist(),
+			name='nullcline V',
+			showlegend=True,
+			mode='lines',
+			marker_color='rgb(30, 144, 255)',
+			line_width=5
+		)
+	)
+	figure.add_trace(
+		go.Scatter(
+			x=V.tolist(), y=nullW.tolist(),
+			name='nullcline W',
+			showlegend=True,
+			mode='lines',
+			marker_color='rgb(255, 127, 14)',
+			line_width=5
+		)
+	)
+	return figure
+
+
+def streamline_trajectories(
 		figure: go.Figure,
 		v_min: float,
 		v_max: float,
@@ -511,6 +457,92 @@ def _integrate_trajectory3D(
 	return figure
 
 
+def make_trajectories_near_bifurcation(
+		model: FHNModel,
+		figure: go.Figure,
+):
+	di = 0.01
+	i, v, w = model.get_fixed_point(-2, 2, 500)
+	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
+	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
+	nb_init_cond = 10
+	# default_visibility = [False for _ in range(len(bifurcation_I) * nb_init_cond * 3 * 2)]
+	# default_visibility[:3] = [True, True, True]
+	steps = [
+		# dict(
+		# 	method="restyle",
+		# 	args=[
+		# 		{'visible': default_visibility}
+		# 	],
+		# 	label='None',
+		# 	value='None',
+		# )
+	]
+	nullclineVRange = np.linspace(-4, 4, 500)
+	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
+		for j in range(3):
+			current_value = bifurcation + (j - 1) * di
+			null_v = model.nullcline_V(current_value, nullclineVRange)
+			null_w = model.nullcline_W(current_value, nullclineVRange)
+			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
+			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
+			initial_conditions = [[fixedV + (itera * 1.4 - 2.8), fixedW + (itera * 6 - 12)] for itera in
+			                      range(nb_init_cond - 4)] + \
+			                     [[fixedV + (((-1) ** itera1) * 3.5), fixedW] for itera1 in range(2)] + \
+			                     [[nullclineVRange[indexnull*(-1)], null_w[indexnull*(-1)]] for indexnull in range(2)]
+			init_v, init_w = tuple(zip(*initial_conditions))
+			sorter = np.argsort(init_w)
+			initial_conditions = np.array(initial_conditions)[sorter].tolist()
+			if (index == 0) and (j == 0):
+				phaseplane2D(figure, model, current_value, nullclineVRange)
+				integrate_trajectory(model, figure, initial_conditions, current_value, scatter3D=False)
+				figure.add_trace(
+					go.Scatter(
+						x=[fixedV],
+						y=[fixedW],
+						mode='markers',
+						name='Point fixe',
+						marker=dict(
+							color='purple',
+							size=8
+						)
+					)
+				)
+			list_init_cond_fig, list_trajectory_fig = _integrate_trajectory(model,
+			                                                                initial_conditions,
+			                                                                current_value,
+			                                                                scatter3D=False,
+			                                                                visible=True)
+			all_fig = list_init_cond_fig + list_trajectory_fig
+			# figure_index = 3 + (index * 3 * nb_init_cond * 2) + (nb_init_cond * j * 2)
+			# visibility_current = [_ for _ in default_visibility]
+			# visibility_current[figure_index:figure_index + 2*nb_init_cond] = [True, True]
+			steps.append(
+				dict(
+					method="restyle",
+					label=label,
+					value=current_value,
+					args=[
+						{
+							'x': [nullclineVRange.tolist(), nullclineVRange.tolist()] + [fig['x'] for fig in
+							                                                             all_fig] + [[fixedV]],
+							'y': [null_v.tolist(), null_w.tolist()] + [fig['y'] for fig in all_fig] + [[fixedW]],
+							'name': ['nullcline V', 'nullcline W'] + [fig['name'] for fig in all_fig]+['Point fixe']
+						}
+					]
+				)
+			)
+	sliders = [dict(
+		active=0,
+		pad={"t": 50},
+		steps=steps,
+
+	)]
+	figure.update_layout(
+		sliders=sliders
+	)
+
+
 def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, list]:
 	bifurcation_I = []
 	for eigenval in [eigen0, eigen1]:
@@ -518,7 +550,6 @@ def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, li
 		amax_eigen = np.argmax(eigenval)
 		current_max = I[amax_eigen]
 		bifurcation_I += fsolve(func, [current_max - 0.05, current_max + 0.05]).tolist()
-	bifurcation_I = list(set(bifurcation_I))
 	bifurcation_eigen = [0 for _ in bifurcation_I]
 	return bifurcation_I, bifurcation_eigen
 
@@ -528,15 +559,14 @@ def integrate_near_bifurcation(
 		figure: go.Figure,
 		v_min: float,
 		v_max: float,
-		numtick: int,
-		scatter3D: bool = True
+		numtick: int
 ):
 	di = 0.01
 	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
 	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
 	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
 	current_to_integrate = []
-	default_visibility = [False for _ in range(len(bifurcation_I) * 12)]
+	default_visibility = [False for _ in range(len(bifurcation_I)*12)]
 	default_visibility[:3] = [True, True, True]
 	steps = [
 		dict(
@@ -550,25 +580,22 @@ def integrate_near_bifurcation(
 	]
 	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
 		for j in range(3):
-			current_value = bifurcation + (j - 1) * di
+			current_value = bifurcation + (j-1)*di
 			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
 			current_to_integrate.append(current_value)
-			# integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
-			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
-			initial_conditions = [[fixedV + (itera * 1.5), fixedW + itera * 3] for itera in range(5)]
-			integrate_trajectory(model, figure, initial_conditions, current_value, scatter3D=scatter3D)
-			# figure.add_trace(
-			# 	go.Scatter3d(
-			# 		x=[stablePointVI(current_value)],
-			# 		y=[current_value],
-			# 		z=[stablePointWI(current_value)],
-			# 		marker_color='purple',
-			# 		visible=False,
-			# 	)
-			# )
-			figure_index = 3 + (index * 3 * len(bifurcation_I)) + 2 * j
+			integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
+			figure.add_trace(
+				go.Scatter3d(
+					x=[stablePointVI(current_value)],
+					y=[current_value],
+					z=[stablePointWI(current_value)],
+					marker_color='purple',
+					visible=False,
+				)
+			)
+			figure_index = 3 + (index * 3 * len(bifurcation_I)) + 2*j
 			visibility_current = [_ for _ in default_visibility]
-			visibility_current[figure_index:figure_index + 2] = [True, True]
+			visibility_current[figure_index:figure_index+2] = [True, True]
 			steps.append(
 				dict(
 					method="restyle",
@@ -716,6 +743,14 @@ def display_trajectories(
 	model = FHNModel()
 	figure = go.Figure()
 	make_trajectories_near_bifurcation(model, figure)
+	figure.update_layout(**plot_layout)
+	figure.update_xaxes(
+		title_text='V [mV]',
+		range=[-4, 4]
+	)
+	figure.update_yaxes(
+		title_text='W [-]',
+	)
 	if save:
 		figure.write_html('orbitesFHN.html')
 	figure.show()
@@ -731,4 +766,4 @@ if __name__ == '__main__':
 	# model.display_model_solution(None,I)
 	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)
-	display_trajectories(save=True)
+	display_trajectories()

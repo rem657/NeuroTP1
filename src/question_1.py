@@ -195,22 +195,22 @@ plot_layout = dict(
 	xaxis=dict(
 		showgrid=False,
 		zeroline=False,
-		title_font={'size': 20},
+		title_font={'size': 30},
 		tickfont=dict(
-			size=20
+			size=30
 		)
 	),
 	yaxis=dict(
 		showgrid=False,
 		zeroline=False,
-		title_font={'size': 20},
+		title_font={'size': 30},
 		tickfont=dict(
-			size=20
+			size=30
 		)
 	),
 	legend=dict(
 		font=dict(
-			size=17
+			size=30
 		)
 	)
 )
@@ -479,6 +479,7 @@ def make_trajectories_near_bifurcation(
 		# )
 	]
 	nullclineVRange = np.linspace(-4, 4, 500)
+	print(len(bifurcation_I))
 	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
 		for j in range(3):
 			current_value = bifurcation + (j - 1) * di
@@ -501,11 +502,26 @@ def make_trajectories_near_bifurcation(
 						x=[fixedV],
 						y=[fixedW],
 						mode='markers',
+						name='Point fixe highlight',
+						marker=dict(
+							color='white',
+							size=16
+						),
+						legendgroup='pointfixe',
+						showlegend=False
+					)
+				)
+				figure.add_trace(
+					go.Scatter(
+						x=[fixedV],
+						y=[fixedW],
+						mode='markers',
 						name='Point fixe',
 						marker=dict(
 							color='purple',
-							size=8
-						)
+							size=12
+						),
+						legendgroup='pointfixe'
 					)
 				)
 			list_init_cond_fig, list_trajectory_fig = _integrate_trajectory(model,
@@ -525,16 +541,16 @@ def make_trajectories_near_bifurcation(
 					args=[
 						{
 							'x': [nullclineVRange.tolist(), nullclineVRange.tolist()] + [fig['x'] for fig in
-							                                                             all_fig] + [[fixedV]],
-							'y': [null_v.tolist(), null_w.tolist()] + [fig['y'] for fig in all_fig] + [[fixedW]],
-							'name': ['nullcline V', 'nullcline W'] + [fig['name'] for fig in all_fig]+['Point fixe']
+							                                                             all_fig] + [[fixedV], [fixedV]],
+							'y': [null_v.tolist(), null_w.tolist()] + [fig['y'] for fig in all_fig] + [[fixedW], [fixedW]],
+							'name': ['nullcline V', 'nullcline W'] + [fig['name'] for fig in all_fig]+['Point fixe highlight', 'Point fixe']
 						}
 					]
 				)
 			)
 	sliders = [dict(
 		active=0,
-		pad={"t": 50},
+		pad={"t": 100},
 		steps=steps,
 
 	)]
@@ -550,6 +566,7 @@ def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, li
 		amax_eigen = np.argmax(eigenval)
 		current_max = I[amax_eigen]
 		bifurcation_I += fsolve(func, [current_max - 0.05, current_max + 0.05]).tolist()
+	bifurcation_I = list(set(bifurcation_I))
 	bifurcation_eigen = [0 for _ in bifurcation_I]
 	return bifurcation_I, bifurcation_eigen
 

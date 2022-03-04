@@ -80,8 +80,8 @@ class CoupleHH:
 		n = self.n_inf(V[0])
 		h = self.h_inf(V[0])
 		spikes = np.zeros((time_steps, *self.weights.shape), dtype=int)
-		spikes[0] = np.ones_like(self.weights, dtype=int)
-		dt_spikes = self.tau_syn * np.ones_like(self.weights, dtype=int)
+		# spikes[0] = np.ones_like(self.weights, dtype=int)
+		dt_spikes = (self.tau_syn/dt) * (1-spikes[0])
 		g_syn = np.asarray(self.weights) * spikes[0]
 		# th = (m ** 3) * h * self.g_Na * self.E_Na + (n ** 4) * self.g_K * self.E_K + self.g_L * self.E_L + self.E_syn
 		th = self.E_Na + self.E_K + self.E_L + self.E_syn

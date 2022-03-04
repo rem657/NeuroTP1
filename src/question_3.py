@@ -119,7 +119,8 @@ if __name__ == '__main__':
 	import matplotlib.pyplot as plt
 	T, dt = 80, 1e-3
 
-	model = CoupleHH(weights=np.array([0.1, -0.2]))
+	# model = CoupleHH(weights=np.array([0.1, -0.2]))
+	model = CoupleHH(weights=np.array([0.0, 0.0]))
 	out = model.run(T=T, dt=dt, I_in_func=I_steps(0*np.ones(10), step_len=10, inactive_len=10))
 	for i in range(out['V'].shape[-1]):
 		x = np.arange(0, T, dt)

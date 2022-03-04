@@ -285,9 +285,7 @@ def I_stairs(current_values: list):
 	return func
 
 
-def I_steps(current_values: list):
-	step_len = 75
-	inactive_len = 25
+def I_steps(current_values: list, step_len=75, inactive_len=25):
 
 	def func(t):
 		active = (t % (inactive_len + step_len)) > inactive_len

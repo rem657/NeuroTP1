@@ -465,7 +465,7 @@ def make_trajectories_near_bifurcation(
 	i, v, w = model.get_fixed_point(-2, 2, 500)
 	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
 	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
-	nb_init_cond = 10
+	nb_init_cond = 11
 	# default_visibility = [False for _ in range(len(bifurcation_I) * nb_init_cond * 3 * 2)]
 	# default_visibility[:3] = [True, True, True]
 	steps = [
@@ -488,9 +488,11 @@ def make_trajectories_near_bifurcation(
 			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
 			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
 			initial_conditions = [[fixedV + (itera * 1.4 - 2.8), fixedW + (itera * 6 - 12)] for itera in
-			                      range(nb_init_cond - 4)] + \
+			                      range(nb_init_cond - 5)] + \
 			                     [[fixedV + (((-1) ** itera1) * 3.5), fixedW] for itera1 in range(2)] + \
-			                     [[nullclineVRange[indexnull*(-1)], null_w[indexnull*(-1)]] for indexnull in range(2)]
+			                     [[nullclineVRange[indexnull*(-1)], null_w[indexnull*(-1)]] for indexnull in range(2)] + \
+			                     [[fixedV + 0.1, fixedW + 0.12]]
+
 			init_v, init_w = tuple(zip(*initial_conditions))
 			sorter = np.argsort(init_w)
 			initial_conditions = np.array(initial_conditions)[sorter].tolist()

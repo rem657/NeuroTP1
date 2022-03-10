@@ -1,7 +1,8 @@
 import numpy as np
 import tqdm
 from scipy.interpolate import interp1d
-from src.question2 import I_steps
+
+from src.ifunc import IConst, IFunc, ISin, ISteps
 
 
 class CoupleHH:
@@ -76,11 +77,16 @@ class CoupleHH:
 			self,
 			T: int = 80,
 			dt: float = 0.01,
-			I_in_func=lambda t: 0.0,
+			I_in_func: IFunc = IConst(0.0),
 			start_with_spike: bool = False,
 			threshold=None,
 	):
 		time_steps = int(T / dt)
+		I_Na = np.zeros((time_steps, *self.weights.shape), dtype=float)
+		I_K = np.zeros((time_steps, *self.weights.shape), dtype=float)
+		I_L = np.zeros((time_steps, *self.weights.shape), dtype=float)
+		I_in = np.zeros((time_steps, *self.weights.shape), dtype=float)
+		I_syn = np.zeros((time_steps, *self.weights.shape), dtype=float)
 		V = np.zeros((time_steps, *self.weights.shape), dtype=float)
 		V[0] = self.V_reset * np.ones_like(self.weights)
 		m = self.m_inf(V[0])
@@ -97,25 +103,35 @@ class CoupleHH:
 			print(f"{threshold = }")
 
 		for t in tqdm.tqdm(range(1, time_steps)):
-			# TODO: tracker tous les courants et le return
-			I_Na = (m ** 3) * h * self.g_Na * (self.E_Na - V[t-1])
-			I_K = (n ** 4) * self.g_K * (self.E_K - V[t-1])
-			I_L = self.g_L * (self.E_L - V[t-1])
+			I_Na[t] = (m ** 3) * h * self.g_Na * (self.E_Na - V[t-1])
+			I_K[t] = (n ** 4) * self.g_K * (self.E_K - V[t-1])
+			I_L[t] = self.g_L * (self.E_L - V[t-1])
+			I_in[t] = I_in_func(t*dt)
 
 			g_syn_others = np.sum(g_syn) - g_syn
 			E_syn_others = np.sum(self.E_syn) - self.E_syn
 			V_others = np.sum(V[t-1]) - V[t-1]
-			I_syn = g_syn_others * (E_syn_others - V_others)
+			I_syn[t] = g_syn_others * (E_syn_others - V_others)
 
-			V[t] = V[t - 1] + dt * ((I_Na + I_K + I_L + I_syn + I_in_func((t-1)*dt)) / self.C_m)
+			V[t] = V[t - 1] + dt * ((I_Na[t] + I_K[t] + I_L[t] + I_syn[t] + I_in[t]) / self.C_m)
 			m += dt * ((1 - m) * self.alpha_m(V[t]) - m * self.beta_m(V[t]))
 			n += dt * ((1 - n) * self.alpha_n(V[t]) - n * self.beta_n(V[t]))
 			h += dt * ((1 - h) * self.alpha_h(V[t]) - h * self.beta_h(V[t]))
 			spikes[t] = (V[t] >= threshold).astype(int)
 			dt_spikes = (1 - spikes[t]) * (dt_spikes + 1)
 			g_syn = g_syn * (1 - dt / self.tau_syn) + self.weights * spikes[t]
-
-		return dict(spikes=spikes, V=V, T=T, dt=dt, threshold=threshold)
+		return dict(
+			spikes=spikes,
+			V=V,
+			T=T,
+			dt=dt,
+			threshold=threshold,
+			I_Na=I_Na,
+			I_K=I_K,
+			I_L=I_L,
+			I_in=I_in,
+			I_syn=I_syn
+		)
 
 	def show_weights_in_func_of_g_syn(self):
 		fig = plt.figure(figsize=(10, 8))
@@ -149,25 +165,47 @@ class CoupleHH:
 		return dict(I_Na=I_Na, I_K=I_K, I_L=I_L)
 
 	def show_weights_exploration(self, k=5, **kwargs):
-		# TODO: ajouter une colonne pour les courants
-		fig, axes = plt.subplots(nrows=k, sharex='all')
-		axes = np.ravel(axes)
+		n_names = ["Exc", "Inh"]
 		weights = self.get_weights_space(alpha=1.0, d=k)
 		weights[:, -1] = 1.0*weights[:, -1][::-1]
-		for i, ax in enumerate(axes):
+		fig, axes = plt.subplots(nrows=k, ncols=weights.shape[-1]+1, sharex='all', figsize=(16, 10))
+		for i, [ax_V, *axes_I_list] in enumerate(axes):
 			model.weights = weights[i]
 			out = self.run(**kwargs)
 			for j in range(out['V'].shape[-1]):
 				x = np.arange(0, out['T'], out['dt'])
-				ax.plot(x, out['V'][:, j], label=f"$n_{j}$")
-				ax.plot(x, out['threshold']*np.ones_like(x), label=f"threshold", c='k')
-				x_indexes = np.argwhere(out['spikes'][:, j] > 0)
-				# ax.scatter(x[x_indexes], out['V'][:, j][x_indexes], label=f'spikes $n_{j}$')
-				# ax.set_xlabel("T [ms]")
-				ax.set_ylabel("V [mV]")
-			ax.set_title(f"weights: {[f'{w:.2e}' for w in weights[i]]}")
-		plt.legend()
-		plt.xlabel("T [ms]")
+				ax_V.plot(x, out['V'][:, j], label=f"{n_names[j]}")
+				if j == 0:
+					ax_V.plot(x, out['threshold']*np.ones_like(x), label=f"threshold", c='k')
+			title = "weights: ["
+			for w in weights[i]:
+				title += f'{w:.2e}, '
+			title += "]"
+			ax_V.set_title(title)
+
+			I_list = [
+				# "I_Na",
+				# "I_K",
+				"I_L",
+				"I_in",
+				"I_syn",
+			]
+			for j, ax_I in enumerate(axes_I_list):
+				for I_idx, I_name in enumerate(I_list):
+					x = np.arange(0, out['T'], out['dt'])
+					ax_I.plot(x, out[I_name][:, j], label=f"{I_name}")
+			if i == 0:
+				[ax_I.set_title(f"{n_names[j]}") for j, ax_I in enumerate(axes_I_list)]
+			if i == k//2:
+				ax_V.set_ylabel("V [mV]")
+				[ax_I.set_ylabel(f"I [mA]") for j, ax_I in enumerate(axes_I_list)]
+			if i == len(axes) - 1:
+				ax_V.legend()
+				[ax_I.legend() for ax_I in axes_I_list]
+				axes_I_list[0].set_xlabel("T [ms]")
+
+		fig.tight_layout(pad=2.0)
+		plt.savefig(f"figures/q3a_{kwargs['I_in_func'].name}.png", dpi=300)
 		plt.show()
 
 
@@ -176,9 +214,9 @@ if __name__ == '__main__':
 	import pprint
 	T, dt = 160, 1e-3
 	model = CoupleHH(weights=np.array([0.3, -0.5]))
-	I_step_func = lambda t: np.array([10.0, 0.0])
 	# model.show_weights_in_func_of_g_syn()
-	model.show_weights_exploration(T=T, k=5, I_in_func=I_step_func)
+	# model.show_weights_exploration(T=T, k=5, I_in_func=ISteps(1.2*np.ones(10), 10, 10, alt=True, name="ISteps_alt"))
+	model.show_weights_exploration(T=T, k=5, I_in_func=IConst(10))
 	pprint.pprint(model.get_stable_currents(), indent=4)
 	model.weights = np.max(model.get_weights_space(), axis=0) * np.array([1., -1.])
 	print(f"{model.weights = }")

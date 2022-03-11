@@ -181,18 +181,17 @@ class CoupleHH:
 		else:
 			weights = self.get_weights_space(alpha=1.0, d=k, **kwargs)
 			weights[:, -1] = 1.0 * weights[:, -1][::-1]
-		kwargs.setdefault("verbose", True)
+		out_list = apply_func_multiprocess(show_weights_exploration_worker, [(self, wi, kwargs) for wi in weights])
 		fig, axes = plt.subplots(nrows=k, ncols=weights.shape[-1]+1, sharex='all', figsize=(16, 10))
 		for i, [ax_V, *axes_I_list] in enumerate(axes):
-			self.weights = weights[i]
-			out = self.run(**kwargs)
+			out = out_list[i]
 			for j in range(out['V'].shape[-1]):
 				x = np.arange(0, out['T'], out['dt'])
 				ax_V.plot(x, out['V'][:, j], label=f"{n_names[j]}")
 				if j == 0:
 					ax_V.plot(x, out['threshold']*np.ones_like(x), label=f"threshold", c='k')
 			title = "weights: ["
-			for w in self.weights:
+			for w in weights[i]:
 				title += f'{w:.2e}, '
 			title += "]"
 			ax_V.set_title(title)
@@ -248,9 +247,16 @@ class CoupleHH:
 		plt.show()
 
 
+def show_weights_exploration_worker(model, weights, kwargs):
+	model.weights = weights
+	out = model.run(**kwargs)
+	return out
+
+
 def question_3_a():
 	T, dt = 160, 1e-2
 	model = CoupleHH()
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(3.0))
 	for p in [10, 18, 20, 21, 22, 30]:
 		model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISin(p, 1.6))
 	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(1.9 * np.ones(10), 10, 10, alt=False))
@@ -354,9 +360,9 @@ def question_3_b_3(out_question_2_b_2: dict):
 	g_syn_list = []
 	freqs = []
 	x_list = []
-	kwargs = dict(d=1_000, I_in_func=IConst(3.0), dt=1e-2, k=5)
+	kwargs = dict(d=100, I_in_func=IConst(3.0), dt=1e-2, k=5)
 	w_space = model.get_weights_space(**kwargs)
-	w1 = out_question_2_b_2["w_exc_spike"]
+	w1 = out_question_2_b_2["w_exc_spike"] * 1.1
 	w2_space = w_space[:, -1]
 	fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(16, 8))
 	out_list = apply_func_multiprocess(question_3_b_3_worker, [(model, w1, wi, kwargs) for wi in w2_space])
@@ -409,7 +415,7 @@ def question_3_b_3(out_question_2_b_2: dict):
 
 if __name__ == '__main__':
 	# CoupleHH().show_weights_in_func_of_g_syn()
-	# question_3_a()
+	question_3_a()
 	# question_3_b_1()
 	question_3_b_2_dict = question_3_b_2()
 	question_3_b_3(question_3_b_2_dict)

@@ -141,7 +141,7 @@ class FHNModel(NeuroneModelDefault):
 	def display_bifurcation_diagram(self, currents, save=False):
 		i, v, w = self.get_fixed_point(-2, 4, 1000)
 		fixedPointV_I, fixedPointW_I = self.fit_fixed_point(i, v, w)
-		initial_conditions_V, initial_conditions_W = fixedPointV_I(i), fixedPointW_I(i)
+		initial_conditions_V, initial_conditions_W = fixedPointV_I(currents), fixedPointW_I(currents)
 		min_values, max_values = self.bifurcation_diagram(currents, initial_conditions_V, initial_conditions_W)
 		figure = go.Figure()
 		figure.add_trace(
@@ -650,7 +650,7 @@ def display_eigenvalues_to_I(
 		i_max: Union[float, None] = None,
 		save: bool = False
 ):
-	bifurcation_marker_size = 5
+	bifurcation_marker_size = 13
 	model = FHNModel()
 	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
 	eigen0, eigen1 = model.get_eigenvalues_at_fixed(v)
@@ -664,16 +664,22 @@ def display_eigenvalues_to_I(
 		go.Scatter(
 			x=i,
 			y=eigen0,
-			name='real part eigenvalue 0',
-			mode='lines'
+			name='Re{λ<sub>0</sub>}',
+			mode='lines',
+			line=dict(
+				width=8
+			)
 		)
 	)
 	figure.add_trace(
 		go.Scatter(
 			x=i,
 			y=eigen1,
-			name='real part eigenvalue 1',
-			mode='lines'
+			name='Re{λ<sub>1</sub>}',
+			mode='lines',
+			line=dict(
+				width=8
+			)
 		)
 	)
 	figure.add_trace(
@@ -681,10 +687,12 @@ def display_eigenvalues_to_I(
 			x=bifurcation_I,
 			y=bifurcation_eigen,
 			mode='markers',
-			marker_size=bifurcation_marker_size + 1,
+			marker_size=bifurcation_marker_size + 3,
 			marker_color='black',
 			name='highlight',
-			hoverinfo='skip'
+			hoverinfo='skip',
+			legendgroup='point',
+			showlegend=False
 		)
 
 	)
@@ -695,9 +703,10 @@ def display_eigenvalues_to_I(
 			mode='markers',
 			marker_size=bifurcation_marker_size,
 			marker_color='orange',
-			name='bifurcation',
-			hovertemplate='Current : %{x:.4f}'
-		)
+			name='Bifurcations',
+			hovertemplate='Current : %{x:.4f}',
+			legendgroup='point'
+	)
 	)
 	tailx = bifurcation_I[0]
 	taily = bifurcation_eigen[0] + 0.5
@@ -705,6 +714,7 @@ def display_eigenvalues_to_I(
 		if index == 0:
 			figure.add_annotation(
 				text="Bifurcations",
+				font=dict(size=20),
 				x=bifurcation_current,
 				y=bifurcation_eigen[index],
 				showarrow=True,
@@ -729,12 +739,26 @@ def display_eigenvalues_to_I(
 
 			)
 	figure.update_layout(
-		xaxis=dict(title='I'),
-		yaxis=dict(title='Eigenvalue')
+		xaxis=dict(title='I [mA]'),
+		yaxis=dict(title='Re{λ}'),
+		legend=dict(
+			bordercolor="Black",
+			borderwidth=1,
+			yanchor='bottom',
+			xanchor='left',
+			x=0.01,
+			y=0.01
+		)
+	)
+	figure.update_layout(plot_layout)
+	figure.update_yaxes(
+		zeroline=True,
+		zerolinecolor='black'
 	)
 	if save:
 		figure.write_html('eigenvalueFHN.html')
-	figure.show()
+	else:
+		figure.show()
 
 
 def display_trajectories(
@@ -762,8 +786,8 @@ if __name__ == '__main__':
 	vmin = -3.5
 	vmax = 3.5
 	model = FHNModel()
-	# model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
+	model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=400), save=True)
 	# model.display_model_solution(None,I)
-	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
+	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)
-	display_trajectories()
+	# display_trajectories(True)

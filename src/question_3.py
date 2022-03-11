@@ -1,7 +1,8 @@
 import numpy as np
 import tqdm
 from scipy.interpolate import interp1d
-
+import matplotlib.pyplot as plt
+from pythonbasictools.multiprocessing import apply_func_multiprocess
 from src.ifunc import IConst, IFunc, ISin, ISteps
 
 
@@ -76,12 +77,14 @@ class CoupleHH:
 	def run(
 			self,
 			T: int = 80,
-			dt: float = 0.01,
 			I_in_func: IFunc = IConst(0.0),
 			start_with_spike: bool = False,
 			threshold=None,
+			**kwargs
 	):
+		dt = kwargs.get('dt', 1e-3)
 		time_steps = int(T / dt)
+		input_weights = kwargs.get("input_weights", np.array([1.0, *np.zeros(len(self.weights)-1)]))
 		I_Na = np.zeros((time_steps, *self.weights.shape), dtype=float)
 		I_K = np.zeros((time_steps, *self.weights.shape), dtype=float)
 		I_L = np.zeros((time_steps, *self.weights.shape), dtype=float)
@@ -92,23 +95,27 @@ class CoupleHH:
 		m = self.m_inf(V[0])
 		n = self.n_inf(V[0])
 		h = self.h_inf(V[0])
-		print(f"{m = }, {n = }, {h = }")
 		spikes = np.zeros((time_steps, *self.weights.shape), dtype=int)
 		if start_with_spike:
 			spikes[0] = np.ones_like(self.weights, dtype=int)
 		dt_spikes = (self.tau_syn/dt) * (1-spikes[0])
-		g_syn = np.asarray(self.weights) * spikes[0]
+		g_syn = np.zeros((time_steps, *self.weights.shape), dtype=float)
+		g_syn[0] = np.asarray(self.weights) * spikes[0]
 		if threshold is None:
 			threshold = 0.0
-			print(f"{threshold = }")
+			# print(f"{threshold = }")
 
-		for t in tqdm.tqdm(range(1, time_steps)):
+		t_range = range(1, time_steps)
+		if kwargs.get('verbose', False):
+			t_range = tqdm.tqdm(t_range)
+
+		for t in t_range:
 			I_Na[t] = (m ** 3) * h * self.g_Na * (self.E_Na - V[t-1])
 			I_K[t] = (n ** 4) * self.g_K * (self.E_K - V[t-1])
 			I_L[t] = self.g_L * (self.E_L - V[t-1])
-			I_in[t] = I_in_func(t*dt)
+			I_in[t] = I_in_func(t*dt) * input_weights
 
-			g_syn_others = np.sum(g_syn) - g_syn
+			g_syn_others = np.sum(g_syn[t-1]) - g_syn[t-1]
 			E_syn_others = np.sum(self.E_syn) - self.E_syn
 			V_others = np.sum(V[t-1]) - V[t-1]
 			I_syn[t] = g_syn_others * (E_syn_others - V_others)
@@ -119,21 +126,22 @@ class CoupleHH:
 			h += dt * ((1 - h) * self.alpha_h(V[t]) - h * self.beta_h(V[t]))
 			spikes[t] = (V[t] >= threshold).astype(int)
 			dt_spikes = (1 - spikes[t]) * (dt_spikes + 1)
-			g_syn = g_syn * (1 - dt / self.tau_syn) + self.weights * spikes[t]
+			g_syn[t] = g_syn[t-1] * (1 - dt / self.tau_syn) + self.weights * spikes[t]
 		return dict(
 			spikes=spikes,
 			V=V,
 			T=T,
 			dt=dt,
 			threshold=threshold,
+			g_syn=g_syn,
 			I_Na=I_Na,
 			I_K=I_K,
 			I_L=I_L,
 			I_in=I_in,
-			I_syn=I_syn
+			I_syn=I_syn,
 		)
 
-	def show_weights_in_func_of_g_syn(self):
+	def show_weights_in_func_of_g_syn(self, dt=1e-3):
 		fig = plt.figure(figsize=(10, 8))
 		g_list = [self.g_Na, self.g_K, self.g_L]
 		g_syn = np.linspace(0, 2*max(g_list))
@@ -149,9 +157,11 @@ class CoupleHH:
 		plt.legend()
 		plt.show()
 
-	def get_weights_space(self, alpha=1.0, d=100):
+	def get_weights_space(self, alpha=1.0, d=100, **kwargs):
+		dt = kwargs.get('dt', 1e-3)
+		dt = 1e-3
 		g_list = [self.g_Na, self.g_K, self.g_L]
-		g_syn = np.linspace(0, alpha * max(g_list), num=d)
+		g_syn = np.linspace(0, alpha * np.max(g_list), num=d)
 		weights = g_syn[:, np.newaxis] - g_syn[:, np.newaxis] * (1 - dt / self.tau_syn)
 		return weights
 
@@ -166,11 +176,15 @@ class CoupleHH:
 
 	def show_weights_exploration(self, k=5, **kwargs):
 		n_names = ["Exc", "Inh"]
-		weights = self.get_weights_space(alpha=1.0, d=k)
-		weights[:, -1] = 1.0*weights[:, -1][::-1]
+		if 'weights' in kwargs:
+			weights = kwargs['weights']
+		else:
+			weights = self.get_weights_space(alpha=1.0, d=k, **kwargs)
+			weights[:, -1] = 1.0 * weights[:, -1][::-1]
+		kwargs.setdefault("verbose", True)
 		fig, axes = plt.subplots(nrows=k, ncols=weights.shape[-1]+1, sharex='all', figsize=(16, 10))
 		for i, [ax_V, *axes_I_list] in enumerate(axes):
-			model.weights = weights[i]
+			self.weights = weights[i]
 			out = self.run(**kwargs)
 			for j in range(out['V'].shape[-1]):
 				x = np.arange(0, out['T'], out['dt'])
@@ -178,7 +192,7 @@ class CoupleHH:
 				if j == 0:
 					ax_V.plot(x, out['threshold']*np.ones_like(x), label=f"threshold", c='k')
 			title = "weights: ["
-			for w in weights[i]:
+			for w in self.weights:
 				title += f'{w:.2e}, '
 			title += "]"
 			ax_V.set_title(title)
@@ -195,46 +209,209 @@ class CoupleHH:
 					x = np.arange(0, out['T'], out['dt'])
 					ax_I.plot(x, out[I_name][:, j], label=f"{I_name}")
 			if i == 0:
+				ax_V.legend()
+				[ax_I.legend() for ax_I in axes_I_list]
 				[ax_I.set_title(f"{n_names[j]}") for j, ax_I in enumerate(axes_I_list)]
 			if i == k//2:
 				ax_V.set_ylabel("V [mV]")
 				[ax_I.set_ylabel(f"I [mA]") for j, ax_I in enumerate(axes_I_list)]
 			if i == len(axes) - 1:
-				ax_V.legend()
-				[ax_I.legend() for ax_I in axes_I_list]
 				axes_I_list[0].set_xlabel("T [ms]")
 
 		fig.tight_layout(pad=2.0)
 		plt.savefig(f"figures/q3a_{kwargs['I_in_func'].name}.png", dpi=300)
+		# plt.show()
+		plt.close(fig)
+
+	def show_spike_freq_by_I(self, I_space=np.linspace(0.0, 20.0, num=10), **kwargs):
+		n_names = ["Exc", "Inh"]
+		freqs = []
+		fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 8))
+		p_bar = tqdm.tqdm(total=len(I_space))
+		for i_idx, i in enumerate(I_space):
+			kwargs['I_in_func'] = IConst(i)
+			out = self.run(**kwargs)
+			spike_counts = np.sum(np.abs(np.diff(out["spikes"], axis=0)), axis=0) / 2
+			spike_freqs = spike_counts / out['T']
+			freqs.append(spike_freqs)
+			p_bar.update()
+		p_bar.close()
+		freqs = np.asarray(freqs)
+		# for j in range(freqs.shape[-1]):
+		# 	ax.plot(I_space, freqs[:, j], label=n_names[j])
+		ax.plot(I_space, freqs[:, 0], label=n_names[0])
+		ax.set_xlabel("I [mA]")
+		ax.set_ylabel("Spiking frequency [Hz]")
+		ax.legend()
+		fig.tight_layout(pad=2.0)
+		plt.savefig(f"figures/q3b1.png", dpi=300)
 		plt.show()
 
 
+def question_3_a():
+	T, dt = 160, 1e-2
+	model = CoupleHH()
+	for p in [10, 18, 20, 21, 22, 30]:
+		model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISin(p, 1.6))
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(1.9 * np.ones(10), 10, 10, alt=False))
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(1.2 * np.ones(10), 10, 10, alt=True))
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(10))
+
+
+def question_3_b_1():
+	T, dt = 160, 1e-2
+	model = CoupleHH()
+	model.show_spike_freq_by_I(T=T, dt=dt, I_space=np.linspace(0.0, 50.0, num=100))
+
+
+def question_3_b_2_worker(model, wi, kwargs):
+	model.weights = np.array([wi, 0.0])
+	out = model.run(**kwargs)
+	return out
+
+
+def question_3_b_2():
+	model = CoupleHH()
+	n_names = ["Exc", "Inh"]
+	V_max_list = []
+	V_min_list = []
+	g_syn_list = []
+	x_list = []
+	kwargs = dict(d=100, I_in_func=IConst(3.0), dt=1e-2, k=5)
+	w1_space = model.get_weights_space(**kwargs)[:, 0]
+	fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(16, 8))
+	out_list = apply_func_multiprocess(question_3_b_2_worker, [(model, wi, kwargs) for wi in w1_space])
+	for out_idx, out in enumerate(out_list):
+		V_max_list.append(np.max(out['V'][:, -1]))
+		V_min_list.append(np.min(out['V'][:, -1]))
+		g_syn_list.append(out['g_syn'])
+		x_list.append(np.arange(0, out['T'], out['dt']))
+		if out_idx == 0:
+			axes[0].plot(w1_space, out['threshold'] * np.ones_like(w1_space), label=f"threshold", c='k')
+	V_max_list = np.asarray(V_max_list)
+	V_min_list = np.asarray(V_min_list)
+	axes[0].plot(w1_space, V_max_list, label="max($V_{Inh}$)")
+	axes[0].plot(w1_space, V_min_list, label="min($V_{Inh}$)")
+	axes[0].set_xscale('log')
+	axes[0].set_xlabel("$w_1$ [-]")
+	axes[0].set_ylabel("Potential [mV]")
+	axes[0].legend()
+
+	# Show g_syn
+	w_0_idx = np.argmin(np.abs(V_max_list))
+	k = kwargs.get('k', 5)
+	w_indexes = list(np.random.randint(0, w_0_idx, size=(k - 1) // 2)) if w_0_idx > 0 else []
+	w_indexes.extend(list(np.random.randint(w_0_idx + 1, len(w1_space), size=k - 1 - len(w_indexes))))
+	w_indexes = np.append(w_indexes, w_0_idx)
+	w_indexes_argsort = np.argsort(w_indexes)
+	for i, w_idx in enumerate(np.sort(w_indexes)):
+		axes[1].plot(x_list[w_idx], g_syn_list[w_idx][:, 0], label=f"$w_1$ = {w1_space[w_idx]:.3e}")
+	legend = axes[1].legend()
+	legend.get_texts()[w_indexes_argsort[-1]].set_color("red")
+	axes[1].set_xlabel("T [ms]")
+	axes[1].set_ylabel("$g_{syn, 1}$ [$mS$/$cm^3$]")
+
+	fig.tight_layout(pad=2.0)
+	plt.savefig(f"figures/q3b2_V_minmax_gsyn.png", dpi=300)
+	# plt.show()
+	plt.close(fig)
+
+	# Show g_syn
+	w_0_idx = np.argmin(np.abs(V_max_list))
+	k = kwargs.get('k', 5)
+	w_indexes = list(np.random.randint(0, w_0_idx, size=(k - 1) // 2)) if w_0_idx > 0 else []
+	w_indexes.extend(list(np.random.randint(w_0_idx+1, len(w1_space), size=k-1-len(w_indexes))))
+	w_indexes = np.sort(np.append(w_indexes, w_0_idx))
+	fig, axes = plt.subplots(nrows=k, ncols=1, figsize=(10, 8))
+	for i in range(k):
+		for j in range(g_syn_list[w_indexes[i]].shape[-1]):
+			axes[i].plot(x_list[w_indexes[i]], g_syn_list[w_indexes[i]][:, j], label=n_names[j])
+		axes[i].set_title(f"$w_1$ = {w1_space[w_indexes[i]]:.3e}")
+		if i == k-1:
+			axes[i].set_xlabel("T [ms]")
+		if i == k//2:
+			axes[i].set_ylabel("$g_{syn}$ [$mS$/$cm^3$]")
+	axes[0].legend()
+	fig.tight_layout(pad=2.0)
+	plt.savefig(f"figures/q3b2_g_syn.png", dpi=300)
+	# plt.show()
+	plt.close(fig)
+	return dict(w_exc_spike=w1_space[w_0_idx])
+
+
+def question_3_b_3_worker(model, w1, w2, kwargs):
+	model.weights = np.array([w1, w2])
+	out = model.run(**kwargs)
+	return out
+
+
+def question_3_b_3(out_question_2_b_2: dict):
+	model = CoupleHH()
+	n_names = ["Exc", "Inh"]
+	V_max_list = []
+	V_min_list = []
+	V_list = []
+	g_syn_list = []
+	freqs = []
+	x_list = []
+	kwargs = dict(d=1_000, I_in_func=IConst(3.0), dt=1e-2, k=5)
+	w_space = model.get_weights_space(**kwargs)
+	w1 = out_question_2_b_2["w_exc_spike"]
+	w2_space = w_space[:, -1]
+	fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(16, 8))
+	out_list = apply_func_multiprocess(question_3_b_3_worker, [(model, w1, wi, kwargs) for wi in w2_space])
+	for out_idx, out in enumerate(out_list):
+		V_list.append(out['V'])
+		V_max_list.append(np.max(out['V'], axis=0))
+		V_min_list.append(np.min(out['V'], axis=0))
+		g_syn_list.append(out['g_syn'])
+		spike_counts = np.sum(np.abs(np.diff(out["spikes"], axis=0)), axis=0) / 2
+		spike_freqs = spike_counts / out['T']
+		freqs.append(spike_freqs)
+		x_list.append(np.arange(0, out['T'], out['dt']))
+		# if out_idx == 0:
+		# 	axes[0].plot(w2_space, out['threshold'] * np.ones_like(w2_space), label=f"threshold", c='k')
+	V_max_list = np.asarray(V_max_list)
+	V_min_list = np.asarray(V_min_list)
+	V_list = np.asarray(V_list)
+	freqs = np.asarray(freqs)
+	# j = 0
+	# axes[0].plot(w2_space, V_max_list[:, j], label="max($V_{"+n_names[j]+"}$)")
+	# axes[0].plot(w2_space, V_min_list[:, j], label="min($V_{"+n_names[j]+"}$)")
+	# axes[0].set_xscale('log')
+	axes[0].set_xlabel("$w_2$ [-]")
+	# axes[0].set_ylabel("Potential [mV]")
+	for j in range(freqs.shape[-1]):
+		axes[0].plot(w2_space, freqs[:, j], label="${" + n_names[j] + "}$")
+	axes[0].set_ylabel("Spiking rate [Hz]")
+	axes[0].legend()
+
+	# Show g_syn
+	w_0_idx = np.argmin(np.abs(V_max_list[:, -1]))
+	k = kwargs.get('k', 5)
+	w_indexes = list(np.random.randint(0, w_0_idx, size=(k - 1) // 2)) if w_0_idx > 0 else []
+	w_indexes.extend(list(np.random.randint(w_0_idx + 1, len(w2_space), size=k - 1 - len(w_indexes))))
+	w_indexes = np.append(w_indexes, w_0_idx)
+	w_indexes_argsort = np.argsort(w_indexes)
+	for i, w_idx in enumerate(np.sort(w_indexes)):
+		axes[1].plot(x_list[w_idx], V_list[w_idx][:, 0], label=f"$w_2$ = {w2_space[w_idx]:.3e}")
+	legend = axes[1].legend()
+	legend.get_texts()[w_indexes_argsort[-1]].set_color("red")
+	axes[1].set_xlabel("T [ms]")
+	# axes[1].set_ylabel("$g_{syn, 2}$ [$mS$/$cm^3$]")
+	axes[1].set_ylabel("$V_{1}$ [mV]")
+
+	fig.tight_layout(pad=2.0)
+	plt.savefig(f"figures/q3b3_spiking_rate.png", dpi=300)
+	plt.show()
+	plt.close(fig)
+
+
 if __name__ == '__main__':
-	import matplotlib.pyplot as plt
-	import pprint
-	T, dt = 160, 1e-3
-	model = CoupleHH(weights=np.array([0.3, -0.5]))
-	# model.show_weights_in_func_of_g_syn()
-	# model.show_weights_exploration(T=T, k=5, I_in_func=ISteps(1.2*np.ones(10), 10, 10, alt=True, name="ISteps_alt"))
-	model.show_weights_exploration(T=T, k=5, I_in_func=IConst(10))
-	pprint.pprint(model.get_stable_currents(), indent=4)
-	model.weights = np.max(model.get_weights_space(), axis=0) * np.array([1., -1.])
-	print(f"{model.weights = }")
-	# I_step_func = lambda t: np.array([I_steps(10*np.ones(10), step_len=10, inactive_len=10)(t), 0.0])
-
-	# out = model.run(T=T, dt=dt, I_in_func=I_step_func)
-	# for i in range(out['V'].shape[-1]):
-	# 	x = np.arange(0, T, dt)
-	# 	plt.plot(x, out['V'][:, i], label=f"$n_{i}$")
-	# 	x_indexes = np.argwhere(out['spikes'][:, i] > 0)
-	# 	plt.scatter(x[x_indexes], out['V'][:, i][x_indexes], label=f'spikes $n_{i}$')
-	# plt.legend()
-	# plt.xlabel("T [ms]")
-	# plt.ylabel("V [mV]")
-	# plt.show()
-
-	# plt.imshow(np.transpose(out['spikes']))
-	# plt.colorbar()
-	# plt.show()
+	# CoupleHH().show_weights_in_func_of_g_syn()
+	# question_3_a()
+	# question_3_b_1()
+	question_3_b_2_dict = question_3_b_2()
+	question_3_b_3(question_3_b_2_dict)
 
 

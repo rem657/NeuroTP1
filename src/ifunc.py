@@ -10,7 +10,9 @@ class IFunc:
 
 
 class IConst(IFunc):
-	def __init__(self, value: float, name="IConst"):
+	def __init__(self, value: float, name=None):
+		if name is None:
+			name = f"IConst_v{str(value).replace('.', '_')}"
 		super(IConst, self).__init__(name)
 		self.value = value
 

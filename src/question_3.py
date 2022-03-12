@@ -1,9 +1,12 @@
+import os
+
 import numpy as np
 import tqdm
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 from pythonbasictools.multiprocessing import apply_func_multiprocess
 from src.ifunc import IConst, IFunc, ISin, ISteps
+import itertools
 
 
 class CoupleHH:
@@ -226,15 +229,17 @@ class CoupleHH:
 		n_names = ["Exc", "Inh"]
 		freqs = []
 		fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 8))
-		p_bar = tqdm.tqdm(total=len(I_space))
+		# p_bar = tqdm.tqdm(total=len(I_space))
+		out_list = apply_func_multiprocess(
+			show_spike_freq_by_I_worker, [(self, i, kwargs) for i_idx, i in enumerate(I_space)]
+		)
 		for i_idx, i in enumerate(I_space):
-			kwargs['I_in_func'] = IConst(i)
-			out = self.run(**kwargs)
+			out = out_list[i_idx]
 			spike_counts = np.sum(np.abs(np.diff(out["spikes"], axis=0)), axis=0) / 2
 			spike_freqs = spike_counts / out['T']
 			freqs.append(spike_freqs)
-			p_bar.update()
-		p_bar.close()
+		# 	p_bar.update()
+		# p_bar.close()
 		freqs = np.asarray(freqs)
 		# for j in range(freqs.shape[-1]):
 		# 	ax.plot(I_space, freqs[:, j], label=n_names[j])
@@ -244,7 +249,14 @@ class CoupleHH:
 		ax.legend()
 		fig.tight_layout(pad=2.0)
 		plt.savefig(f"figures/q3b1.png", dpi=300)
-		plt.show()
+		# plt.show()
+		plt.close(fig)
+
+
+def show_spike_freq_by_I_worker(model, i, kwargs):
+	kwargs['I_in_func'] = IConst(i)
+	out = model.run(**kwargs)
+	return out
 
 
 def show_weights_exploration_worker(model, weights, kwargs):
@@ -259,7 +271,7 @@ def question_3_a():
 	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(3.0))
 	for p in [10, 18, 20, 21, 22, 30]:
 		model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISin(p, 1.6))
-	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(1.9 * np.ones(10), 10, 10, alt=False))
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(2.1 * np.ones(10), 10, 10, alt=False))
 	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(1.2 * np.ones(10), 10, 10, alt=True))
 	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(10))
 
@@ -267,7 +279,7 @@ def question_3_a():
 def question_3_b_1():
 	T, dt = 160, 1e-2
 	model = CoupleHH()
-	model.show_spike_freq_by_I(T=T, dt=dt, I_space=np.linspace(0.0, 50.0, num=100))
+	model.show_spike_freq_by_I(T=T, dt=dt, I_space=np.linspace(0.0, 50.0, num=1_000))
 
 
 def question_3_b_2_worker(model, wi, kwargs):
@@ -283,7 +295,7 @@ def question_3_b_2():
 	V_min_list = []
 	g_syn_list = []
 	x_list = []
-	kwargs = dict(d=100, I_in_func=IConst(3.0), dt=1e-2, k=5)
+	kwargs = dict(d=1_000, I_in_func=IConst(3.0), dt=1e-2, T=160, k=5)
 	w1_space = model.get_weights_space(**kwargs)[:, 0]
 	fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(16, 8))
 	out_list = apply_func_multiprocess(question_3_b_2_worker, [(model, wi, kwargs) for wi in w1_space])
@@ -347,11 +359,22 @@ def question_3_b_2():
 
 def question_3_b_3_worker(model, w1, w2, kwargs):
 	model.weights = np.array([w1, w2])
-	out = model.run(**kwargs)
+	out = dict(err=0)
+	try:
+		out.update(model.run(**kwargs))
+	except RuntimeWarning:
+		print("RuntimeWarning Fuck you")
+		out['err'] = 1
 	return out
 
 
-def question_3_b_3(out_question_2_b_2: dict):
+def mean_free_path(hit_path: np.ndarray, reverse=True):
+	not_hit = np.logical_not(hit_path.astype(bool)) if reverse else hit_path.astype(bool)
+	times = [sum(1 for _ in group) for key, group in itertools.groupby(not_hit) if key]
+	return np.mean(times)
+
+
+def question_3_b_3(out_question_2_b_2: dict = None):
 	model = CoupleHH()
 	n_names = ["Exc", "Inh"]
 	V_max_list = []
@@ -359,14 +382,19 @@ def question_3_b_3(out_question_2_b_2: dict):
 	V_list = []
 	g_syn_list = []
 	freqs = []
+	mean_free_path_list = []
 	x_list = []
-	kwargs = dict(d=100, I_in_func=IConst(3.0), dt=1e-2, k=5)
+	kwargs = dict(d=1_000, I_in_func=IConst(5.0), dt=1e-2, T=160, k=5)
 	w_space = model.get_weights_space(**kwargs)
 	w1 = out_question_2_b_2["w_exc_spike"] * 1.1
+	# w1 = np.quantile(w_space[:, 0], 0.9)
+	# w1 = np.mean(w_space[:, 0])
 	w2_space = w_space[:, -1]
 	fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(16, 8))
 	out_list = apply_func_multiprocess(question_3_b_3_worker, [(model, w1, wi, kwargs) for wi in w2_space])
 	for out_idx, out in enumerate(out_list):
+		if out['err']:
+			continue
 		V_list.append(out['V'])
 		V_max_list.append(np.max(out['V'], axis=0))
 		V_min_list.append(np.min(out['V'], axis=0))
@@ -374,6 +402,8 @@ def question_3_b_3(out_question_2_b_2: dict):
 		spike_counts = np.sum(np.abs(np.diff(out["spikes"], axis=0)), axis=0) / 2
 		spike_freqs = spike_counts / out['T']
 		freqs.append(spike_freqs)
+		mean_free_paths = [mean_free_path(out["spikes"][:, j])*out['dt'] for j in range(out["spikes"].shape[-1])]
+		mean_free_path_list.append(mean_free_paths)
 		x_list.append(np.arange(0, out['T'], out['dt']))
 		# if out_idx == 0:
 		# 	axes[0].plot(w2_space, out['threshold'] * np.ones_like(w2_space), label=f"threshold", c='k')
@@ -381,15 +411,20 @@ def question_3_b_3(out_question_2_b_2: dict):
 	V_min_list = np.asarray(V_min_list)
 	V_list = np.asarray(V_list)
 	freqs = np.asarray(freqs)
+	mean_free_path_list = np.asarray(mean_free_path_list)
 	# j = 0
 	# axes[0].plot(w2_space, V_max_list[:, j], label="max($V_{"+n_names[j]+"}$)")
 	# axes[0].plot(w2_space, V_min_list[:, j], label="min($V_{"+n_names[j]+"}$)")
 	# axes[0].set_xscale('log')
 	axes[0].set_xlabel("$w_2$ [-]")
 	# axes[0].set_ylabel("Potential [mV]")
+	# for j in range(freqs.shape[-1]):
+	# 	axes[0].plot(w2_space, freqs[:, j]*1_000, label="${" + n_names[j] + "}$")
+	# axes[0].set_ylabel("Spiking rate [Hz]")
 	for j in range(freqs.shape[-1]):
-		axes[0].plot(w2_space, freqs[:, j], label="${" + n_names[j] + "}$")
-	axes[0].set_ylabel("Spiking rate [Hz]")
+		axes[0].plot(w2_space, mean_free_path_list[:, j], label="${" + n_names[j] + "}$")
+	axes[0].set_ylabel("Mean free path [ms]")
+	axes[0].set_title(f"$w_1$={w1:.3e}")
 	axes[0].legend()
 
 	# Show g_syn
@@ -408,16 +443,19 @@ def question_3_b_3(out_question_2_b_2: dict):
 	axes[1].set_ylabel("$V_{1}$ [mV]")
 
 	fig.tight_layout(pad=2.0)
-	plt.savefig(f"figures/q3b3_spiking_rate.png", dpi=300)
-	plt.show()
+	plt.savefig(f"figures/q3b3_spiking_rate_{kwargs['I_in_func'].name}.png", dpi=300)
+	# plt.show()
 	plt.close(fig)
 
 
 if __name__ == '__main__':
+	os.makedirs("figures/", exist_ok=True)
+	# plt.rcParams.update({'font.size': 18})
 	# CoupleHH().show_weights_in_func_of_g_syn()
 	question_3_a()
 	# question_3_b_1()
-	question_3_b_2_dict = question_3_b_2()
-	question_3_b_3(question_3_b_2_dict)
+	# question_3_b_2_dict = question_3_b_2()
+	# question_3_b_3(question_3_b_2_dict)
+
 
 

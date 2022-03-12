@@ -21,7 +21,9 @@ class IConst(IFunc):
 
 
 class ISteps(IFunc):
-	def __init__(self, current_values: np.ndarray, step_len=20, inactive_len=20, alt=False, name="ISteps"):
+	def __init__(self, current_values: np.ndarray, step_len=20, inactive_len=20, alt=False, name=None):
+		if name is None:
+			name = "ISteps_alt" if alt else "ISteps"
 		super(ISteps, self).__init__(name)
 		self.current_values = current_values
 		self.step_len = step_len

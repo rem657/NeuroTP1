@@ -1,6 +1,8 @@
 # -C_m dV_m/dt = g_K(V_M - E_K) + g_Na(V_M - E_Na) + g_L(V_M - E_L)
+import functools
 from typing import List, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -227,7 +229,7 @@ class HHModel(NeuroneModelDefault):
 		m = self.m_inf(V)#gamma_m / (1 + gamma_m)
 		h = self.h_inf(V)#gamma_h / (1 + gamma_h)
 		n = self.n_inf(V)#gamma_n / (1 + gamma_n)
-		I = self.I_Na(V, m, h) + self.I_K(V, n) + self.I_L(V)
+		I = (self.I_Na(V, m, h) + self.I_K(V, n) + self.I_L(V))
 		return [I, V, m, h, n]
 
 	def get_fixed_point(self, v_min: float, v_max: float, numtick: int):
@@ -412,6 +414,24 @@ def I_steps(current_values: list):
 	return func
 
 
+def fill_infty_func(func, x_space, fill=np.inf):
+	x_max = np.max(x_space)
+	x_min = np.min(x_space)
+
+	@functools.wraps(func)
+	def wrapper(x, *args):
+		x = np.asarray(x)
+		if x.ndim == 0:
+			out = func(x, *args) if np.logical_and(x > x_min, x < x_max) else fill
+		elif x.ndim == 1:
+			out = np.asarray([func(xi, *args) if np.logical_and(xi > x_min, xi < x_max) else fill for xi in x])
+		else:
+			raise NotImplementedError()
+		# out = np.where(np.logical_and(x > x_min, x < x_max), func(x, *args), fill)
+		return out
+	return wrapper
+
+
 def get_bifurcation_point(I: List, eigen_values) -> Tuple[list, list]:
 	I_zeros = []
 	for eigenval in eigen_values:
@@ -422,7 +442,7 @@ def get_bifurcation_point(I: List, eigen_values) -> Tuple[list, list]:
 		ei_zeros = np.argwhere(np.abs(ei_sign_diff) > 0.0).squeeze()
 		I_prev, I_next = I[ei_zeros], I[ei_zeros + 1]
 		curr_I_zeros_hat = (I_next + I_next) / 2.0
-		func = interp1d(I, eigenval)
+		func = fill_infty_func(interp1d(I, eigenval), I, fill=np.max(eigenval))
 		bifurcation_I = fsolve(func, curr_I_zeros_hat)
 		I_zeros.extend(bifurcation_I.flatten().tolist())
 	bifurcation_eigen = np.zeros_like(I_zeros).tolist()
@@ -443,7 +463,7 @@ def display_eigenvalues_to_I(
 	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
 	eigen_values, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)))
 	bifurcation_I, bifurcation_eigen = get_bifurcation_point(I, eigen_values)
-	print(f"{bifurcation_I = }")
+	print(f"{np.sort(bifurcation_I) = }")
 	if i_max is not None:
 		I, eigen_values = np.array(I), np.array(eigen_values)
 		mask = I <= i_max
@@ -516,8 +536,8 @@ def display_eigenvalues_to_I(
 
 			)
 	figure.update_layout(
-		xaxis=dict(title='I'),
-		yaxis=dict(title='Eigenvalue')
+		xaxis=dict(title='I [mA]'),
+		yaxis=dict(title='Eigenvalue [-]')
 	)
 	if save:
 		figure.write_html(save_name)
@@ -612,14 +632,43 @@ def display_eigenvalues_phase(
 		figure.show()
 
 
+def show_potential_series(**kwargs):
+	I_burf = [7.88, 154.0]
+	kwargs.setdefault('k', 6)
+	nrows = kwargs['k']
+	model = HHModel()
+	# I_space = [5.0, I_burf[0], 15.0, 100, I_burf[1], 160.0]
+	fig, axes = plt.subplots(ncols=len(I_burf), nrows=3, figsize=(12, 8), sharex='all')
+	for j, bif_point in enumerate(I_burf):
+		I_space = [0.7*bif_point, bif_point, 1.3*bif_point]
+		for i, I_i in enumerate(I_space):
+			I_func = np.vectorize(lambda t: I_i)
+			time, V, m, h, n = model.compute_model(None, I_func)
+			axes[i, j].plot(time, V)
+			if i == 1:
+				axes[i, j].set_title(f"I = {I_i:.3f} [$\mu$A/$cm^2$]", color='red')
+			else:
+				axes[i, j].set_title(f"I = {I_i:.3f} [$\mu$A/$cm^2$]")
+	axes[1, 0].set_ylabel("V [mV]")
+	axes[-1, 0].set_xlabel("T [ms]")
+	axes[-1, 1].set_xlabel("T [ms]")
+	plt.tight_layout(pad=1.0)
+	plt.savefig("figures/q2a.png", dpi=300)
+	# plt.show()
+	plt.close(fig)
+
+
 if __name__ == '__main__':
 	# I = lambda t: 35 * (t > 100) - 35 * (t > 200) + 150 * (t > 300) - 150 * (t > 400)
 	# I = I_stairs(list(range(0, 110, 5)))
 	# I = I_steps(list(range(0, 150, 10)))
 	# display_HHModel(I, 0, 1800, 0.01)
-	vmin = -71
-	vmax = -65
+	vmin = -65
+	# vmax = -40
+	# vmin = -65
+	vmax = 0
 	model = HHModel(t_end=250.0)
-	model.display_bifurcation_diagram(-100, -35, resolution=200)
-	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
+	# model.display_bifurcation_diagram(-100, -35, resolution=200)
+	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
 	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
+	show_potential_series()

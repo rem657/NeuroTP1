@@ -227,7 +227,7 @@ class HHModel(NeuroneModelDefault):
 		m = self.m_inf(V)#gamma_m / (1 + gamma_m)
 		h = self.h_inf(V)#gamma_h / (1 + gamma_h)
 		n = self.n_inf(V)#gamma_n / (1 + gamma_n)
-		I = - self.I_Na(V, m, h) - self.I_K(V, n) - self.I_L(V)
+		I = self.I_Na(V, m, h) + self.I_K(V, n) + self.I_L(V)
 		return [I, V, m, h, n]
 
 	def get_fixed_point(self, v_min: float, v_max: float, numtick: int):
@@ -264,8 +264,14 @@ class HHModel(NeuroneModelDefault):
 			max_values.append(max(last_v))
 		return min_values, max_values
 
+	@staticmethod
+	def fit_fixed_point(currents: list, V: list, W: list):
+		V_I = interp1d(currents, V)
+		W_I = interp1d(currents, W)
+		return V_I, W_I
+
 	def display_bifurcation_diagram(self, vmin: float = -1000.0, vmax: float = 100, resolution: int = 1000, save=True):
-		i, v, m, h, n = self.get_fixed_point(vmin, vmax, resolution)
+		i, v, m, h, n = self.get_fixed_point(-65, -40, 2000)
 		min_values, max_values = self.bifurcation_diagram(i, np.asarray([v + 0.001, m + 0.001, h + 0.001, n + 0.001]))
 		figure = go.Figure()
 		figure.add_trace(
@@ -317,9 +323,9 @@ class HHModel(NeuroneModelDefault):
 
 
 def display_HHModel(I_inj: callable, t_init: float, t_end: float, t_inter: float):
-	model = HHModel(I_inj, t_init=t_init, t_end=t_end, t_inter=t_inter)
+	model = HHModel(t_init=t_init, t_end=t_end, t_inter=t_inter)
 	I_inj = np.vectorize(I_inj)
-	t, V, m, h, n = model.compute_model()
+	t, V, m, h, n = model.compute_model(None, lambda t : I_inj)
 	n_row = 4
 	fig = make_subplots(
 		rows=n_row,
@@ -614,6 +620,6 @@ if __name__ == '__main__':
 	vmin = -71
 	vmax = -65
 	model = HHModel(t_end=250.0)
-	model.display_bifurcation_diagram(-500, resolution=200)
+	model.display_bifurcation_diagram(-100, -35, resolution=200)
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
 	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)

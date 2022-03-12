@@ -8,6 +8,33 @@ from NeuroneModelDefault import *
 import seaborn as sns
 
 
+plot_layout = dict(
+	plot_bgcolor='aliceblue',
+	paper_bgcolor="white",
+	xaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	yaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	legend=dict(
+		font=dict(
+			size=17
+		)
+	)
+)
+
+
 class FHNModel(NeuroneModelDefault):
 	def __init__(
 			self,
@@ -138,19 +165,33 @@ class FHNModel(NeuroneModelDefault):
 			max_values.append(max(last_v))
 		return min_values, max_values
 
-	def display_bifurcation_diagram(self, currents, save=False):
-		i, v, w = self.get_fixed_point(-2, 4, 1000)
+	def display_bifurcation_diagram(self, currents: np.ndarray, save=False):
+		i, v, w = self.get_fixed_point(-2, 4, 5000)
 		fixedPointV_I, fixedPointW_I = self.fit_fixed_point(i, v, w)
 		initial_conditions_V, initial_conditions_W = fixedPointV_I(currents), fixedPointW_I(currents)
-		min_values, max_values = self.bifurcation_diagram(currents, initial_conditions_V, initial_conditions_W)
+		min_values, max_values = self.bifurcation_diagram(currents, initial_conditions_V + 0.01, initial_conditions_W + 0.01)
+		bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
+		bifurcation_V = fixedPointV_I(bifurcation_I).tolist()
 		figure = go.Figure()
+		figure.add_trace(
+			go.Scatter(
+				name='fixed points',
+				x=currents,
+				mode='lines',
+				y=initial_conditions_V,
+				marker_color='crimson',
+				line_dash='dot'
+			)
+		)
+		linewidth = 2
 		figure.add_trace(
 			go.Scatter(
 				name='Minimum potential',
 				x=currents,
 				y=min_values,
 				mode='lines',
-				marker_color='royalblue'
+				marker_color='royalblue',
+				line_width=linewidth
 			)
 		)
 		figure.add_trace(
@@ -159,61 +200,65 @@ class FHNModel(NeuroneModelDefault):
 				x=currents,
 				y=max_values,
 				mode='lines',
-				marker_color='royalblue'
+				marker_color='royalblue',
+				line_width=linewidth
+			)
+		)
+		bifurcation_marker_size = 4
+		figure.add_trace(
+			go.Scatter(
+				x=bifurcation_I,
+				y=bifurcation_V,
+				mode='markers',
+				marker_size=bifurcation_marker_size+1,
+				marker_color='black',
+				name='bifurcation',
+				hoverinfo='skip',
+				legendgroup='point',
+				showlegend=False
 			)
 		)
 		figure.add_trace(
 			go.Scatter(
-				name='fixed points',
-				x=currents,
-				mode='lines',
-				y=fixedPointV_I(np.array(currents)).tolist(),
-				marker_color='crimson',
-				line_dash='dot'
+				x=bifurcation_I,
+				y=bifurcation_V,
+				mode='markers',
+				marker_size=bifurcation_marker_size,
+				marker_color='orange',
+				name='bifurcation',
+				hoverinfo='skip',
+				legendgroup='point',
 			)
 		)
+		for i in range(len(bifurcation_V)):
+			figure.add_annotation(
+				text='',
+				x=bifurcation_I[i],
+				ax=bifurcation_I[i] + ((-1)**i)*0.1,
+				axref='x',
+				y=bifurcation_V[i],
+				ay=bifurcation_V[i] + ((-1)**i)*0.1,
+				ayref='y',
+				showarrow=True,
+				arrowwidth=2.5,
+				arrowhead=2
+			)
 		figure.update_layout(
 			xaxis=dict(
-				title='I',
+				title='I [mA]',
 				showgrid=False,
 				zeroline=False
 			),
 			yaxis=dict(
-				title='V',
+				title='V [mV]',
 				showgrid=False,
 				zeroline=False
 			)
 		)
+		figure.update_layout(plot_layout)
 		if save:
 			figure.write_html('bifurcationFHN.html')
-		figure.show()
-
-
-plot_layout = dict(
-	plot_bgcolor='aliceblue',
-	paper_bgcolor="white",
-	xaxis=dict(
-		showgrid=False,
-		zeroline=False,
-		title_font={'size': 20},
-		tickfont=dict(
-			size=20
-		)
-	),
-	yaxis=dict(
-		showgrid=False,
-		zeroline=False,
-		title_font={'size': 20},
-		tickfont=dict(
-			size=20
-		)
-	),
-	legend=dict(
-		font=dict(
-			size=17
-		)
-	)
-)
+		# figure.show()
 
 
 def integrate_trajectory3D(
@@ -706,7 +751,7 @@ def display_eigenvalues_to_I(
 			name='Bifurcations',
 			hovertemplate='Current : %{x:.4f}',
 			legendgroup='point'
-	)
+		)
 	)
 	tailx = bifurcation_I[0]
 	taily = bifurcation_eigen[0] + 0.5
@@ -786,7 +831,7 @@ if __name__ == '__main__':
 	vmin = -3.5
 	vmax = 3.5
 	model = FHNModel()
-	model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=400), save=True)
+	model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=800), save=True)
 	# model.display_model_solution(None,I)
 	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)

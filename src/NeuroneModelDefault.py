@@ -45,4 +45,3 @@ class NeuroneModelDefault:
 			return list(zip(*np.real(list_eigenval))), list(zip(*np.imag(list_eigenval))), list(zip(*list_eigenvects))
 		return list(zip(*np.real(list_eigenval))), list(zip(*list_eigenvects))
 
-

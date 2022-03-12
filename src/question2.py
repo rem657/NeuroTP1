@@ -15,7 +15,6 @@ from scipy.optimize import fsolve
 
 from src.NeuroneModelDefault import NeuroneModelDefault
 
-
 plot_layout = dict(
 	plot_bgcolor='aliceblue',
 	paper_bgcolor="white",
@@ -67,7 +66,8 @@ class HHModel(NeuroneModelDefault):
 		self.E_Na = E_Na  # Potentiel Nernst Sodium, mV
 		self.E_K = E_K  # Potentiel Nernst Potassium, mV
 		self.E_L = E_L  # Potentiel Nernst leak, mV
-		# self.I_inj = I_inj  # 10 * (t > 100) - 10 * (t > 200) + 35 * (t > 300) - 35 * (t > 400)
+
+	# self.I_inj = I_inj  # 10 * (t > 100) - 10 * (t > 200) + 35 * (t > 300) - 35 * (t > 400)
 
 	@staticmethod
 	def alpha_n(V: float):
@@ -226,18 +226,18 @@ class HHModel(NeuroneModelDefault):
 		# gamma_h = self.alpha_h(V) / self.beta_h(V)
 		# gamma_n = self.alpha_n(V) / self.beta_n(V)
 		#
-		m = self.m_inf(V)#gamma_m / (1 + gamma_m)
-		h = self.h_inf(V)#gamma_h / (1 + gamma_h)
-		n = self.n_inf(V)#gamma_n / (1 + gamma_n)
-		I = (self.I_Na(V, m, h) + self.I_K(V, n) + self.I_L(V))
+		m = self.m_inf(V)  # gamma_m / (1 + gamma_m)
+		h = self.h_inf(V)  # gamma_h / (1 + gamma_h)
+		n = self.n_inf(V)  # gamma_n / (1 + gamma_n)
+		I = self.I_Na(V, m, h) + self.I_K(V, n) + self.I_L(V)
 		return [I, V, m, h, n]
 
 	def get_fixed_point(self, v_min: float, v_max: float, numtick: int):
-		[I, V, m, h, n] = self.X_nullcline_intersect(np.linspace(v_min, stop=v_max, num=numtick))
+		[I, V, m, h, n] = self.X_nullcline_intersect(np.linspace(v_min, stop=v_max, num=numtick,))
 		intersect_mask = I >= 0  # & (intersect_i <= i_max)
 		return I[intersect_mask], V[intersect_mask], m[intersect_mask], h[intersect_mask], n[intersect_mask]
 
-	def integrate_multiple_currents(self, currents: list, initial_conditions: np.ndarray):
+	def integrate_multiple_currents(self, currents: np.ndarray, initial_conditions: np.ndarray):
 		all_param = []
 		for index, I in enumerate(currents):
 			current_func = lambda t: I
@@ -255,33 +255,53 @@ class HHModel(NeuroneModelDefault):
 			)
 		return time_integrated, all_param
 
-	def bifurcation_diagram(self, currents: list, initial_conditions: np.ndarray):
+	def bifurcation_diagram(self, currents: np.ndarray, initial_conditions: np.ndarray):
 		time_integrated, all_param = self.integrate_multiple_currents(currents, initial_conditions)
 		min_values = []
 		max_values = []
 		for index in range(len(currents)):
 			v_for_current = all_param[index]['V']
 			last_v = v_for_current[int(len(v_for_current) / 2):]
-			min_values.append(min(last_v))
-			max_values.append(max(last_v))
+			min_val = min(last_v)
+			max_val = max(last_v)
+			if np.isclose(min_val, max_val):
+				min_values.append(None)
+				max_values.append(None)
+			else :
+				min_values.append(min_val)
+				max_values.append(max_val)
 		return min_values, max_values
 
 	@staticmethod
-	def fit_fixed_point(currents: list, V: list, W: list):
+	def fit_fixed_point(currents: np.ndarray, V: np.ndarray, m: np.ndarray, h: np.ndarray, n: np.ndarray):
 		V_I = interp1d(currents, V)
-		W_I = interp1d(currents, W)
-		return V_I, W_I
+		m_I = interp1d(currents, m)
+		h_I = interp1d(currents, h)
+		n_I = interp1d(currents, n)
+		return V_I, m_I, h_I, n_I
 
-	def display_bifurcation_diagram(self, vmin: float = -1000.0, vmax: float = 100, resolution: int = 1000, save=True):
-		i, v, m, h, n = self.get_fixed_point(-65, -40, 2000)
-		min_values, max_values = self.bifurcation_diagram(i, np.asarray([v + 0.001, m + 0.001, h + 0.001, n + 0.001]))
+	def display_bifurcation_diagram(self, currents: np.ndarray, save=True):
+		i, v, m, h, n = self.get_fixed_point(-65, -41, 5000)
+		fixedV_I, fixedm_I, fixedh_I, fixedn_I = self.fit_fixed_point(i, v, m, h, n)
+		min_values, max_values = self.bifurcation_diagram(
+			currents,
+			np.asarray(
+				[
+					fixedV_I(currents),
+					fixedm_I(currents),
+					fixedh_I(currents),
+					fixedn_I(currents) + 0.001
+				]
+			)
+		)
+
 		figure = go.Figure()
 		figure.add_trace(
 			go.Scatter(
 				name='fixed points',
-				x=i,
+				x=currents,
 				mode='lines',
-				y=v,
+				y=fixedV_I(currents),
 				marker_color='crimson',
 				line_dash='dot'
 			)
@@ -290,21 +310,59 @@ class HHModel(NeuroneModelDefault):
 		figure.add_trace(
 			go.Scatter(
 				name='Minimum potential',
-				x=i,
+				x=currents,
 				y=min_values,
-				mode='lines',
+				mode='markers',
 				marker_color='royalblue',
-				line_width=linewidth
+				legendgroup='min',
+				# line_width=linewidth
 			)
 		)
 		figure.add_trace(
 			go.Scatter(
 				name='Maximum potential',
-				x=i,
+				x=currents,
 				y=max_values,
-				mode='lines',
+				mode='markers',
 				marker_color='royalblue',
-				line_width=linewidth
+				legendgroup='max',
+				# line_width=linewidth
+			)
+		)
+		first_current = np.linspace(6.27, 10, 50)
+		min_values_o, max_values_o = self.bifurcation_diagram(
+			first_current,
+			np.asarray(
+				[
+					fixedV_I(first_current),
+					fixedm_I(first_current),
+					fixedh_I(first_current),
+					fixedn_I(first_current) + 0.01
+				]
+			)
+		)
+		figure.add_trace(
+			go.Scatter(
+				# name='Minimum potential',
+				x=first_current,
+				y=min_values_o,
+				mode='markers',
+				marker_color='royalblue',
+				legendgroup='min',
+				showlegend=False
+				# line_width=linewidth
+			)
+		)
+		figure.add_trace(
+			go.Scatter(
+				# name='Maximum potential',
+				x=first_current,
+				y=max_values_o,
+				mode='markers',
+				marker_color='royalblue',
+				legendgroup='max',
+				showlegend=False
+				# line_width=linewidth
 			)
 		)
 		figure.update_layout(
@@ -327,7 +385,7 @@ class HHModel(NeuroneModelDefault):
 def display_HHModel(I_inj: callable, t_init: float, t_end: float, t_inter: float):
 	model = HHModel(t_init=t_init, t_end=t_end, t_inter=t_inter)
 	I_inj = np.vectorize(I_inj)
-	t, V, m, h, n = model.compute_model(None, lambda t : I_inj)
+	t, V, m, h, n = model.compute_model(None, lambda t: I_inj)
 	n_row = 4
 	fig = make_subplots(
 		rows=n_row,
@@ -672,3 +730,6 @@ if __name__ == '__main__':
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
 	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
 	show_potential_series()
+	model.display_bifurcation_diagram(np.linspace(1, 170, 500))
+    # display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
+    # display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)

@@ -786,6 +786,10 @@ def show_potential_series(**kwargs):
 	plt.close(fig)
 
 
+def Q2Bifurcation_diagram(model: HHModel, max_current: float, resolution: int):
+	model.display_bifurcation_diagram( np.linspace(1, max_current, resolution))
+
+
 if __name__ == '__main__':
 	# I = lambda t: 35 * (t > 100) - 35 * (t > 200) + 150 * (t > 300) - 150 * (t > 400)
 	# I = I_stairs(list(range(0, 110, 5)))
@@ -796,7 +800,7 @@ if __name__ == '__main__':
 	# vmin = -65
 	vmax = -40
 	model = HHModel(t_end=250.0)
-	model.display_bifurcation_diagram(-100, -35, resolution=200)
+	Q2Bifurcation_diagram(model, np.linspace(1, 160, 1000))
 	display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
 	display_eigenvalues_phase(HHModel(), vmin, vmax, numtick=10_000, save=True)
 	show_potential_series()

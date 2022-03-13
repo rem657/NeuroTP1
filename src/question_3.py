@@ -222,7 +222,7 @@ class CoupleHH:
 				axes_I_list[0].set_xlabel("T [ms]")
 
 		fig.tight_layout(pad=2.0)
-		plt.savefig(f"figures/q3a_{kwargs['I_in_func'].name}.png", dpi=300)
+		plt.savefig(f"{kwargs['fig_folder']}/q3a_{kwargs['I_in_func'].name}.png", dpi=300)
 		# plt.show()
 		plt.close(fig)
 
@@ -249,7 +249,7 @@ class CoupleHH:
 		ax.set_ylabel("Spiking frequency [Hz]")
 		ax.legend()
 		fig.tight_layout(pad=2.0)
-		plt.savefig(f"figures/q3b1.png", dpi=300)
+		plt.savefig(f"{kwargs['fig_folder']}/q3b1.png", dpi=300)
 		# plt.show()
 		plt.close(fig)
 
@@ -267,20 +267,28 @@ def show_weights_exploration_worker(model, weights, kwargs):
 
 
 def question_3_a():
+	fig_folder = "figures/Q3/"
+	os.makedirs(fig_folder, exist_ok=True)
 	T, dt = 160, 1e-2
 	model = CoupleHH()
-	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(3.0))
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(3.0), fig_folder=fig_folder)
 	for p in [10, 18, 20, 21, 22, 30]:
-		model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISin(p, 1.6))
-	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(2.1 * np.ones(10), 10, 10, alt=False))
-	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISteps(1.2 * np.ones(10), 10, 10, alt=True))
-	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(10))
+		model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=ISin(p, 1.6), fig_folder=fig_folder)
+	model.show_weights_exploration(
+		T=T, dt=dt, k=5, I_in_func=ISteps(2.1 * np.ones(10), 10, 10, alt=False), fig_folder=fig_folder
+	)
+	model.show_weights_exploration(
+		T=T, dt=dt, k=5, I_in_func=ISteps(1.2 * np.ones(10), 10, 10, alt=True), fig_folder=fig_folder
+	)
+	model.show_weights_exploration(T=T, dt=dt, k=5, I_in_func=IConst(10), fig_folder=fig_folder)
 
 
 def question_3_b_1():
+	fig_folder = "figures/Q3/"
+	os.makedirs(fig_folder, exist_ok=True)
 	T, dt = 160, 1e-2
 	model = CoupleHH()
-	model.show_spike_freq_by_I(T=T, dt=dt, I_space=np.linspace(0.0, 50.0, num=1_000))
+	model.show_spike_freq_by_I(T=T, dt=dt, I_space=np.linspace(0.0, 50.0, num=1_000), fig_folder=fig_folder)
 
 
 def question_3_b_2_worker(model, wi, kwargs):
@@ -290,6 +298,8 @@ def question_3_b_2_worker(model, wi, kwargs):
 
 
 def question_3_b_2():
+	fig_folder = "figures/Q3/"
+	os.makedirs(fig_folder, exist_ok=True)
 	model = CoupleHH()
 	n_names = ["Exc", "Inh"]
 	V_max_list = []
@@ -331,7 +341,7 @@ def question_3_b_2():
 	axes[1].set_ylabel("$g_{syn, 1}$ [$mS$/$cm^3$]")
 
 	fig.tight_layout(pad=2.0)
-	plt.savefig(f"figures/q3b2_V_minmax_gsyn.png", dpi=300)
+	plt.savefig(f"{fig_folder}/q3b2_V_minmax_gsyn.png", dpi=300)
 	# plt.show()
 	plt.close(fig)
 
@@ -352,7 +362,7 @@ def question_3_b_2():
 			axes[i].set_ylabel("$g_{syn}$ [$mS$/$cm^3$]")
 	axes[0].legend()
 	fig.tight_layout(pad=2.0)
-	plt.savefig(f"figures/q3b2_g_syn.png", dpi=300)
+	plt.savefig(f"{fig_folder}/q3b2_g_syn.png", dpi=300)
 	# plt.show()
 	plt.close(fig)
 	return dict(w_exc_spike=w1_space[w_0_idx])
@@ -376,6 +386,8 @@ def mean_free_path(hit_path: np.ndarray, reverse=True):
 
 
 def question_3_b_3(out_question_2_b_2: dict = None):
+	fig_folder = "figures/Q3/"
+	os.makedirs(fig_folder, exist_ok=True)
 	model = CoupleHH()
 	n_names = ["Exc", "Inh"]
 	V_max_list = []
@@ -444,13 +456,12 @@ def question_3_b_3(out_question_2_b_2: dict = None):
 	axes[1].set_ylabel("$V_{1}$ [mV]")
 
 	fig.tight_layout(pad=2.0)
-	plt.savefig(f"figures/q3b3_spiking_rate_{kwargs['I_in_func'].name}.png", dpi=300)
+	plt.savefig(f"{fig_folder}/q3b3_spiking_rate_{kwargs['I_in_func'].name}.png", dpi=300)
 	# plt.show()
 	plt.close(fig)
 
 
 if __name__ == '__main__':
-	os.makedirs("figures/", exist_ok=True)
 	plt.rcParams.update({'font.size': 12})
 	CoupleHH().show_weights_in_func_of_g_syn()
 	question_3_a()

@@ -32,7 +32,7 @@ plot_layout = dict(
 	paper_bgcolor="white",
 	xaxis=dict(
 		showgrid=False,
-		zeroline=False,
+		zeroline=True,
 		title_font={'size': 20},
 		tickfont=dict(
 			size=20
@@ -40,7 +40,7 @@ plot_layout = dict(
 	),
 	yaxis=dict(
 		showgrid=False,
-		zeroline=False,
+		zeroline=True,
 		title_font={'size': 20},
 		tickfont=dict(
 			size=20
@@ -608,7 +608,6 @@ def display_eigenvalues_to_I(
 	figure.update_layout(
 		plot_layout,
 	)
-	import plotly.express as px
 	figure.update_layout(
 		xaxis=dict(title=f'I [{entityToUnicode["mu"]} A/cm<sup>2</sup>]'),
 		yaxis=dict(title='Eigenvalue [-]')
@@ -641,7 +640,19 @@ def display_eigenvalues_phase(
 				x=eigen,
 				y=eigen_values_imag[i],
 				name=f'Eigenvalue {i}',
-				mode='lines'
+				mode='markers',
+				marker=dict(
+					# size=12,
+					color=I,
+					cmin=np.min(I),
+					cmax=np.max(I),
+					colorbar=dict(
+						title=f'I [{entityToUnicode["mu"]} A/cm<sup>2</sup>]'
+					),
+					colorscale='Viridis',
+					showscale=True,
+				),
+				hovertemplate="I:%{marker.color}, (%{x}, %{y})",
 			)
 		)
 	# figure.add_trace(
@@ -697,8 +708,12 @@ def display_eigenvalues_phase(
 	#
 	# 		)
 	figure.update_layout(
+		plot_layout,
+	)
+	figure.update_layout(
 		xaxis=dict(title='Re(Eigenvalue)'),
-		yaxis=dict(title='Imag(Eigenvalue)')
+		yaxis=dict(title='Imag(Eigenvalue)'),
+		showlegend=False,
 	)
 	if save:
 		figure.write_html(save_name)
@@ -740,12 +755,12 @@ if __name__ == '__main__':
 	vmin = -65
 	# vmax = -40
 	# vmin = -65
-	vmax = 0
+	vmax = -40
 	model = HHModel(t_end=250.0)
 	# model.display_bifurcation_diagram(-100, -35, resolution=200)
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
-	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
-	show_potential_series()
+	display_eigenvalues_phase(HHModel(), vmin, vmax, numtick=10_000, save=True)
+	# show_potential_series()
 	# model.display_bifurcation_diagram(np.linspace(1, 170, 500))
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
 	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)

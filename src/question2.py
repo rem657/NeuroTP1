@@ -1,5 +1,6 @@
 # -C_m dV_m/dt = g_K(V_M - E_K) + g_Na(V_M - E_Na) + g_L(V_M - E_L)
 import functools
+import os
 from typing import List, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -561,6 +562,8 @@ def display_eigenvalues_to_I(
 		save_name: str = "eigenvalues_HH.html",
 		show=False,
 ):
+	fig_folder = "figures/Q2/"
+	os.makedirs(fig_folder, exist_ok=True)
 	bifurcation_marker_size = 5
 	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
 	eigen_values, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)))
@@ -645,7 +648,7 @@ def display_eigenvalues_to_I(
 		yaxis=dict(title='Eigenvalue [-]')
 	)
 	if save:
-		figure.write_html(save_name)
+		figure.write_html(fig_folder+save_name)
 	if show:
 		figure.show()
 
@@ -659,6 +662,8 @@ def display_eigenvalues_phase(
 		save_name: str = "eigenvalues_phase_HH.html",
 		show=False,
 ):
+	fig_folder = "figures/Q2/"
+	os.makedirs(fig_folder, exist_ok=True)
 	bifurcation_marker_size = 5
 	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
 	eigen_values_re, eigen_values_imag, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)), re_imag=True)
@@ -748,12 +753,14 @@ def display_eigenvalues_phase(
 		showlegend=False,
 	)
 	if save:
-		figure.write_html(save_name)
+		figure.write_html(fig_folder+save_name)
 	if show:
 		figure.show()
 
 
 def show_potential_series(**kwargs):
+	fig_folder = "figures/Q2/"
+	os.makedirs(fig_folder, exist_ok=True)
 	I_burf = [9.77543932, 154.52243272]
 	kwargs.setdefault('k', 6)
 	nrows = kwargs['k']
@@ -774,7 +781,7 @@ def show_potential_series(**kwargs):
 	axes[-1, 0].set_xlabel("T [ms]")
 	axes[-1, 1].set_xlabel("T [ms]")
 	plt.tight_layout(pad=1.0)
-	plt.savefig("figures/q2a.png", dpi=300)
+	plt.savefig(f"{fig_folder}/q2a.png", dpi=300)
 	# plt.show()
 	plt.close(fig)
 

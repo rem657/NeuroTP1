@@ -8,6 +8,33 @@ from NeuroneModelDefault import *
 import seaborn as sns
 
 
+plot_layout = dict(
+	plot_bgcolor='aliceblue',
+	paper_bgcolor="white",
+	xaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	yaxis=dict(
+		showgrid=False,
+		zeroline=False,
+		title_font={'size': 20},
+		tickfont=dict(
+			size=20
+		)
+	),
+	legend=dict(
+		font=dict(
+			size=19
+		)
+	)
+)
+
+
 class FHNModel(NeuroneModelDefault):
 	def __init__(
 			self,
@@ -138,19 +165,33 @@ class FHNModel(NeuroneModelDefault):
 			max_values.append(max(last_v))
 		return min_values, max_values
 
-	def display_bifurcation_diagram(self, currents, save=False):
-		i, v, w = self.get_fixed_point(-2, 4, 1000)
+	def display_bifurcation_diagram(self, currents: np.ndarray, save=False):
+		i, v, w = self.get_fixed_point(-2, 4, 5000)
 		fixedPointV_I, fixedPointW_I = self.fit_fixed_point(i, v, w)
-		initial_conditions_V, initial_conditions_W = fixedPointV_I(i), fixedPointW_I(i)
-		min_values, max_values = self.bifurcation_diagram(currents, initial_conditions_V, initial_conditions_W)
+		initial_conditions_V, initial_conditions_W = fixedPointV_I(currents), fixedPointW_I(currents)
+		min_values, max_values = self.bifurcation_diagram(currents, initial_conditions_V + 0.01, initial_conditions_W + 0.01)
+		bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
+		bifurcation_V = fixedPointV_I(bifurcation_I).tolist()
 		figure = go.Figure()
+		figure.add_trace(
+			go.Scatter(
+				name='fixed points',
+				x=currents,
+				mode='lines',
+				y=initial_conditions_V,
+				marker_color='crimson',
+				line_dash='dot'
+			)
+		)
+		linewidth = 2
 		figure.add_trace(
 			go.Scatter(
 				name='Minimum potential',
 				x=currents,
 				y=min_values,
 				mode='lines',
-				marker_color='royalblue'
+				marker_color='royalblue',
+				line_width=linewidth
 			)
 		)
 		figure.add_trace(
@@ -159,61 +200,65 @@ class FHNModel(NeuroneModelDefault):
 				x=currents,
 				y=max_values,
 				mode='lines',
-				marker_color='royalblue'
+				marker_color='royalblue',
+				line_width=linewidth
+			)
+		)
+		bifurcation_marker_size = 4
+		figure.add_trace(
+			go.Scatter(
+				x=bifurcation_I,
+				y=bifurcation_V,
+				mode='markers',
+				marker_size=bifurcation_marker_size+1,
+				marker_color='black',
+				name='bifurcation',
+				hoverinfo='skip',
+				legendgroup='point',
+				showlegend=False
 			)
 		)
 		figure.add_trace(
 			go.Scatter(
-				name='fixed points',
-				x=currents,
-				mode='lines',
-				y=fixedPointV_I(np.array(currents)).tolist(),
-				marker_color='crimson',
-				line_dash='dot'
+				x=bifurcation_I,
+				y=bifurcation_V,
+				mode='markers',
+				marker_size=bifurcation_marker_size,
+				marker_color='orange',
+				name='bifurcation',
+				hoverinfo='skip',
+				legendgroup='point',
 			)
 		)
+		for i in range(len(bifurcation_V)):
+			figure.add_annotation(
+				text='',
+				x=bifurcation_I[i],
+				ax=bifurcation_I[i] + ((-1)**i)*0.1,
+				axref='x',
+				y=bifurcation_V[i],
+				ay=bifurcation_V[i] + ((-1)**i)*0.1,
+				ayref='y',
+				showarrow=True,
+				arrowwidth=2.5,
+				arrowhead=2
+			)
 		figure.update_layout(
 			xaxis=dict(
-				title='I',
+				title='I [μA/cm²]',
 				showgrid=False,
 				zeroline=False
 			),
 			yaxis=dict(
-				title='V',
+				title='V [mV]',
 				showgrid=False,
 				zeroline=False
 			)
 		)
+		figure.update_layout(plot_layout)
 		if save:
 			figure.write_html('bifurcationFHN.html')
-		figure.show()
-
-
-plot_layout = dict(
-	plot_bgcolor='aliceblue',
-	paper_bgcolor="white",
-	xaxis=dict(
-		showgrid=False,
-		zeroline=False,
-		title_font={'size': 30},
-		tickfont=dict(
-			size=30
-		)
-	),
-	yaxis=dict(
-		showgrid=False,
-		zeroline=False,
-		title_font={'size': 30},
-		tickfont=dict(
-			size=30
-		)
-	),
-	legend=dict(
-		font=dict(
-			size=30
-		)
-	)
-)
+		# figure.show()
 
 
 def integrate_trajectory3D(
@@ -465,7 +510,7 @@ def make_trajectories_near_bifurcation(
 	i, v, w = model.get_fixed_point(-2, 2, 500)
 	stablePointVI, stablePointWI = model.fit_fixed_point(i, v, w)
 	bifurcation_I, bifurcation_eigen = model.compute_bifurcation_from_model(i, v)
-	nb_init_cond = 11
+	nb_init_cond = 10
 	# default_visibility = [False for _ in range(len(bifurcation_I) * nb_init_cond * 3 * 2)]
 	# default_visibility[:3] = [True, True, True]
 	steps = [
@@ -479,7 +524,6 @@ def make_trajectories_near_bifurcation(
 		# )
 	]
 	nullclineVRange = np.linspace(-4, 4, 500)
-	print(len(bifurcation_I))
 	for index, bifurcation in enumerate(np.sort(bifurcation_I)):
 		for j in range(3):
 			current_value = bifurcation + (j - 1) * di
@@ -488,11 +532,9 @@ def make_trajectories_near_bifurcation(
 			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
 			fixedV, fixedW = stablePointVI(current_value), stablePointWI(current_value)
 			initial_conditions = [[fixedV + (itera * 1.4 - 2.8), fixedW + (itera * 6 - 12)] for itera in
-			                      range(nb_init_cond - 5)] + \
+			                      range(nb_init_cond - 4)] + \
 			                     [[fixedV + (((-1) ** itera1) * 3.5), fixedW] for itera1 in range(2)] + \
-			                     [[nullclineVRange[indexnull*(-1)], null_w[indexnull*(-1)]] for indexnull in range(2)] + \
-			                     [[fixedV + 0.1, fixedW + 0.12]]
-
+			                     [[nullclineVRange[indexnull*(-1)], null_w[indexnull*(-1)]] for indexnull in range(2)]
 			init_v, init_w = tuple(zip(*initial_conditions))
 			sorter = np.argsort(init_w)
 			initial_conditions = np.array(initial_conditions)[sorter].tolist()
@@ -504,26 +546,11 @@ def make_trajectories_near_bifurcation(
 						x=[fixedV],
 						y=[fixedW],
 						mode='markers',
-						name='Point fixe highlight',
-						marker=dict(
-							color='white',
-							size=16
-						),
-						legendgroup='pointfixe',
-						showlegend=False
-					)
-				)
-				figure.add_trace(
-					go.Scatter(
-						x=[fixedV],
-						y=[fixedW],
-						mode='markers',
 						name='Point fixe',
 						marker=dict(
 							color='purple',
-							size=12
-						),
-						legendgroup='pointfixe'
+							size=8
+						)
 					)
 				)
 			list_init_cond_fig, list_trajectory_fig = _integrate_trajectory(model,
@@ -543,16 +570,16 @@ def make_trajectories_near_bifurcation(
 					args=[
 						{
 							'x': [nullclineVRange.tolist(), nullclineVRange.tolist()] + [fig['x'] for fig in
-							                                                             all_fig] + [[fixedV], [fixedV]],
-							'y': [null_v.tolist(), null_w.tolist()] + [fig['y'] for fig in all_fig] + [[fixedW], [fixedW]],
-							'name': ['nullcline V', 'nullcline W'] + [fig['name'] for fig in all_fig]+['Point fixe highlight', 'Point fixe']
+							                                                             all_fig] + [[fixedV]],
+							'y': [null_v.tolist(), null_w.tolist()] + [fig['y'] for fig in all_fig] + [[fixedW]],
+							'name': ['nullcline V', 'nullcline W'] + [fig['name'] for fig in all_fig]+['Point fixe']
 						}
 					]
 				)
 			)
 	sliders = [dict(
 		active=0,
-		pad={"t": 100},
+		pad={"t": 50},
 		steps=steps,
 
 	)]
@@ -568,7 +595,6 @@ def get_bifurcation_point(I: List, eigen0: List, eigen1: List) -> Tuple[list, li
 		amax_eigen = np.argmax(eigenval)
 		current_max = I[amax_eigen]
 		bifurcation_I += fsolve(func, [current_max - 0.05, current_max + 0.05]).tolist()
-	bifurcation_I = list(set(bifurcation_I))
 	bifurcation_eigen = [0 for _ in bifurcation_I]
 	return bifurcation_I, bifurcation_eigen
 
@@ -669,7 +695,7 @@ def display_eigenvalues_to_I(
 		i_max: Union[float, None] = None,
 		save: bool = False
 ):
-	bifurcation_marker_size = 5
+	bifurcation_marker_size = 13
 	model = FHNModel()
 	i, v, w = model.get_fixed_point(v_min, v_max, numtick)
 	eigen0, eigen1 = model.get_eigenvalues_at_fixed(v)
@@ -683,16 +709,22 @@ def display_eigenvalues_to_I(
 		go.Scatter(
 			x=i,
 			y=eigen0,
-			name='real part eigenvalue 0',
-			mode='lines'
+			name='Re{λ<sub>0</sub>}',
+			mode='lines',
+			line=dict(
+				width=8
+			)
 		)
 	)
 	figure.add_trace(
 		go.Scatter(
 			x=i,
 			y=eigen1,
-			name='real part eigenvalue 1',
-			mode='lines'
+			name='Re{λ<sub>1</sub>}',
+			mode='lines',
+			line=dict(
+				width=8
+			)
 		)
 	)
 	figure.add_trace(
@@ -700,10 +732,12 @@ def display_eigenvalues_to_I(
 			x=bifurcation_I,
 			y=bifurcation_eigen,
 			mode='markers',
-			marker_size=bifurcation_marker_size + 1,
+			marker_size=bifurcation_marker_size + 3,
 			marker_color='black',
 			name='highlight',
-			hoverinfo='skip'
+			hoverinfo='skip',
+			legendgroup='point',
+			showlegend=False
 		)
 
 	)
@@ -714,8 +748,9 @@ def display_eigenvalues_to_I(
 			mode='markers',
 			marker_size=bifurcation_marker_size,
 			marker_color='orange',
-			name='bifurcation',
-			hovertemplate='Current : %{x:.4f}'
+			name='Bifurcations',
+			hovertemplate='Current : %{x:.4f}',
+			legendgroup='point'
 		)
 	)
 	tailx = bifurcation_I[0]
@@ -724,6 +759,7 @@ def display_eigenvalues_to_I(
 		if index == 0:
 			figure.add_annotation(
 				text="Bifurcations",
+				font=dict(size=20),
 				x=bifurcation_current,
 				y=bifurcation_eigen[index],
 				showarrow=True,
@@ -748,12 +784,26 @@ def display_eigenvalues_to_I(
 
 			)
 	figure.update_layout(
-		xaxis=dict(title='I'),
-		yaxis=dict(title='Eigenvalue')
+		xaxis=dict(title='I [μA/cm²]'),
+		yaxis=dict(title='Re{λ}'),
+		legend=dict(
+			bordercolor="Black",
+			borderwidth=1,
+			yanchor='bottom',
+			xanchor='left',
+			x=0.01,
+			y=0.01
+		)
+	)
+	figure.update_layout(plot_layout)
+	figure.update_yaxes(
+		zeroline=True,
+		zerolinecolor='black'
 	)
 	if save:
 		figure.write_html('eigenvalueFHN.html')
-	figure.show()
+	else:
+		figure.show()
 
 
 def display_trajectories(
@@ -781,8 +831,8 @@ if __name__ == '__main__':
 	vmin = -3.5
 	vmax = 3.5
 	model = FHNModel()
-	# model.display_bifurcation_diagram(np.linspace(0, 1.5, num=500), save=True)
+	# model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=800), save=True)
 	# model.display_model_solution(None,I)
-	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=False)
+	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)
-	display_trajectories()
+	# display_trajectories(True)

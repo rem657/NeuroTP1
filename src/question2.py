@@ -775,7 +775,7 @@ def show_potential_series(**kwargs):
 	axes[-1, 1].set_xlabel("T [ms]")
 	plt.tight_layout(pad=1.0)
 	plt.savefig("figures/q2a.png", dpi=300)
-	plt.show()
+	# plt.show()
 	plt.close(fig)
 
 

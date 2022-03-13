@@ -158,7 +158,8 @@ class CoupleHH:
 		plt.xlabel("$g_{syn}$ [$mS/cm^3$]")
 		plt.ylabel("weights [-]")
 		plt.legend()
-		plt.show()
+		# plt.show()
+		plt.close(fig)
 
 	def get_weights_space(self, alpha=1.0, d=100, **kwargs):
 		dt = kwargs.get('dt', 1e-3)
@@ -451,7 +452,7 @@ def question_3_b_3(out_question_2_b_2: dict = None):
 if __name__ == '__main__':
 	os.makedirs("figures/", exist_ok=True)
 	plt.rcParams.update({'font.size': 12})
-	# CoupleHH().show_weights_in_func_of_g_syn()
+	CoupleHH().show_weights_in_func_of_g_syn()
 	question_3_a()
 	question_3_b_1()
 	question_3_b_2_dict = question_3_b_2()

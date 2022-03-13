@@ -79,7 +79,6 @@ class HHModel(NeuroneModelDefault):
 		self.E_K = E_K  # Potentiel Nernst Potassium, mV
 		self.E_L = E_L  # Potentiel Nernst leak, mV
 
-	# self.I_inj = I_inj  # 10 * (t > 100) - 10 * (t > 200) + 35 * (t > 300) - 35 * (t > 400)
 
 	@staticmethod
 	def alpha_n(V: float):
@@ -341,7 +340,42 @@ class HHModel(NeuroneModelDefault):
 				# line_width=linewidth
 			)
 		)
-		first_current = np.linspace(6.27, 10, 50)
+		first_current = np.linspace(6.27, 10, 25)
+		min_values_o, max_values_o = self.bifurcation_diagram(
+			first_current,
+			np.asarray(
+				[
+					fixedV_I(first_current),
+					fixedm_I(first_current),
+					fixedh_I(first_current),
+					fixedn_I(first_current) + 0.1
+				]
+			)
+		)
+		figure.add_trace(
+			go.Scatter(
+				# name='Minimum potential',
+				x=first_current,
+				y=min_values_o,
+				mode='markers',
+				marker_color='royalblue',
+				legendgroup='min',
+				showlegend=False
+				# line_width=linewidth
+			)
+		)
+		figure.add_trace(
+			go.Scatter(
+				# name='Maximum potential',
+				x=first_current,
+				y=max_values_o,
+				mode='markers',
+				marker_color='royalblue',
+				legendgroup='max',
+				showlegend=False
+				# line_width=linewidth
+			)
+		)
 		min_values_o, max_values_o = self.bifurcation_diagram(
 			first_current,
 			np.asarray(
@@ -379,7 +413,7 @@ class HHModel(NeuroneModelDefault):
 		)
 		figure.update_layout(
 			xaxis=dict(
-				title='I [mA]',
+				title='I [μA/cm²]',
 				showgrid=False,
 				zeroline=False
 			),
@@ -764,3 +798,7 @@ if __name__ == '__main__':
 	# model.display_bifurcation_diagram(np.linspace(1, 170, 500))
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
 	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
+	model.display_bifurcation_diagram(np.linspace(1, 170, 500))
+    # display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
+    # display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
+

@@ -789,14 +789,9 @@ if __name__ == '__main__':
 	# vmin = -65
 	vmax = -40
 	model = HHModel(t_end=250.0)
-	# model.display_bifurcation_diagram(-100, -35, resolution=200)
-	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
+	model.display_bifurcation_diagram(-100, -35, resolution=200)
+	display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
 	display_eigenvalues_phase(HHModel(), vmin, vmax, numtick=10_000, save=True)
-	# show_potential_series()
-	# model.display_bifurcation_diagram(np.linspace(1, 170, 500))
-	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
-	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
-	model.display_bifurcation_diagram(np.linspace(1, 170, 500))
-    # display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
-    # display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
+	show_potential_series()
+
 

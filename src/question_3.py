@@ -216,7 +216,7 @@ class CoupleHH:
 				[ax_I.set_title(f"{n_names[j]}") for j, ax_I in enumerate(axes_I_list)]
 			if i == k//2:
 				ax_V.set_ylabel("V [mV]")
-				[ax_I.set_ylabel(f"I [mA]") for j, ax_I in enumerate(axes_I_list)]
+				[ax_I.set_ylabel(f"I [$\mu A / cm^2$]") for j, ax_I in enumerate(axes_I_list)]
 			if i == len(axes) - 1:
 				axes_I_list[0].set_xlabel("T [ms]")
 
@@ -244,7 +244,7 @@ class CoupleHH:
 		# for j in range(freqs.shape[-1]):
 		# 	ax.plot(I_space, freqs[:, j], label=n_names[j])
 		ax.plot(I_space, freqs[:, 0], label=n_names[0])
-		ax.set_xlabel("I [mA]")
+		ax.set_xlabel("I [$\mu A / cm^2$]")
 		ax.set_ylabel("Spiking frequency [Hz]")
 		ax.legend()
 		fig.tight_layout(pad=2.0)
@@ -450,12 +450,12 @@ def question_3_b_3(out_question_2_b_2: dict = None):
 
 if __name__ == '__main__':
 	os.makedirs("figures/", exist_ok=True)
-	# plt.rcParams.update({'font.size': 18})
+	plt.rcParams.update({'font.size': 12})
 	# CoupleHH().show_weights_in_func_of_g_syn()
 	question_3_a()
-	# question_3_b_1()
-	# question_3_b_2_dict = question_3_b_2()
-	# question_3_b_3(question_3_b_2_dict)
+	question_3_b_1()
+	question_3_b_2_dict = question_3_b_2()
+	question_3_b_3(question_3_b_2_dict)
 
 
 

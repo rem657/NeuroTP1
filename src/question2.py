@@ -426,7 +426,7 @@ class HHModel(NeuroneModelDefault):
 		)
 		figure.update_layout(plot_layout)
 		if save:
-			figure.write_html('bifurcationHH.html')
+			figure.write_html('figures/Q2/bifurcationHH.html')
 
 
 def display_HHModel(I_inj: callable, t_init: float, t_end: float, t_inter: float):

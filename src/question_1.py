@@ -29,7 +29,7 @@ plot_layout = dict(
 	),
 	legend=dict(
 		font=dict(
-			size=17
+			size=19
 		)
 	)
 )
@@ -245,7 +245,7 @@ class FHNModel(NeuroneModelDefault):
 			)
 		figure.update_layout(
 			xaxis=dict(
-				title='I [mA]',
+				title='I [μA/cm²]',
 				showgrid=False,
 				zeroline=False
 			),
@@ -784,7 +784,7 @@ def display_eigenvalues_to_I(
 
 			)
 	figure.update_layout(
-		xaxis=dict(title='I [mA]'),
+		xaxis=dict(title='I [μA/cm²]'),
 		yaxis=dict(title='Re{λ}'),
 		legend=dict(
 			bordercolor="Black",
@@ -831,8 +831,8 @@ if __name__ == '__main__':
 	vmin = -3.5
 	vmax = 3.5
 	model = FHNModel()
-	model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=800), save=True)
+	# model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=800), save=True)
 	# model.display_model_solution(None,I)
-	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
+	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)
 	# display_trajectories(True)

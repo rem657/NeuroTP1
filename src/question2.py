@@ -15,6 +15,18 @@ from scipy.optimize import fsolve
 
 from src.NeuroneModelDefault import NeuroneModelDefault
 
+entityToUnicode = {
+    "mu": 'μ',
+    "amp": '&',
+    "lt": '<',
+    "gt": '>',
+    "nbsp": ' ',
+    "times": '×',
+    "pm": '±',
+    "deg": '°'
+}
+
+
 plot_layout = dict(
 	plot_bgcolor='aliceblue',
 	paper_bgcolor="white",
@@ -146,7 +158,7 @@ class HHModel(NeuroneModelDefault):
 
 	def Jacobian(self, *X):
 		return np.array([
-			[self.deldV_delVdt(X), self.deldV_delmdt(X), self.deldV_delndt(X), self.deldV_delhdt(X)],
+			[self.deldV_delVdt(X), self.deldV_delmdt(X), self.deldV_delhdt(X), self.deldV_delndt(X)],
 			[self.deldm_delVdt(X), self.deldm_delmdt(X), 0.0, 0.0],
 			[self.deldh_delVdt(X), 0.0, self.deldh_delhdt(X), 0.0],
 			[self.deldn_delVdt(X), 0.0, 0.0, self.deldn_delndt(X)],
@@ -594,7 +606,11 @@ def display_eigenvalues_to_I(
 
 			)
 	figure.update_layout(
-		xaxis=dict(title='I [mA]'),
+		plot_layout,
+	)
+	import plotly.express as px
+	figure.update_layout(
+		xaxis=dict(title=f'I [{entityToUnicode["mu"]} A/cm<sup>2</sup>]'),
 		yaxis=dict(title='Eigenvalue [-]')
 	)
 	if save:
@@ -691,14 +707,14 @@ def display_eigenvalues_phase(
 
 
 def show_potential_series(**kwargs):
-	I_burf = [7.88, 154.0]
+	I_burf = [9.77543932, 154.52243272]
 	kwargs.setdefault('k', 6)
 	nrows = kwargs['k']
 	model = HHModel()
 	# I_space = [5.0, I_burf[0], 15.0, 100, I_burf[1], 160.0]
 	fig, axes = plt.subplots(ncols=len(I_burf), nrows=3, figsize=(12, 8), sharex='all')
 	for j, bif_point in enumerate(I_burf):
-		I_space = [0.7*bif_point, bif_point, 1.3*bif_point]
+		I_space = [0.5*bif_point, bif_point, 1.5*bif_point]
 		for i, I_i in enumerate(I_space):
 			I_func = np.vectorize(lambda t: I_i)
 			time, V, m, h, n = model.compute_model(None, I_func)
@@ -712,7 +728,7 @@ def show_potential_series(**kwargs):
 	axes[-1, 1].set_xlabel("T [ms]")
 	plt.tight_layout(pad=1.0)
 	plt.savefig("figures/q2a.png", dpi=300)
-	# plt.show()
+	plt.show()
 	plt.close(fig)
 
 
@@ -730,6 +746,6 @@ if __name__ == '__main__':
 	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
 	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
 	show_potential_series()
-	model.display_bifurcation_diagram(np.linspace(1, 170, 500))
-    # display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
-    # display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
+	# model.display_bifurcation_diagram(np.linspace(1, 170, 500))
+	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
+	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)

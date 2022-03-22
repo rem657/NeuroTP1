@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d, LinearNDInterpolator
-from NeuroneModelDefault import *
+from src.NeuroneModelDefault import *
 import seaborn as sns
 
 plot_layout = dict(
@@ -258,9 +258,7 @@ class FHNModel(NeuroneModelDefault):
 		)
 		figure.update_layout(plot_layout)
 		if save:
-
 			figure.write_html('figures/Q1/1b_bifurcationFHN.html')
-
 
 
 def integrate_trajectory3D(
@@ -633,7 +631,7 @@ def integrate_near_bifurcation(
 			current_value = bifurcation + (j - 1) * di
 			label = f'I = {current_value:.3f}' if j != 1 else f'bifurcation I = {current_value:.3f}'
 			current_to_integrate.append(current_value)
-			integrate_trajectory3D(figure, v_min, v_max, numtick, model, current_value, visible=False)
+			integrate_trajectory3D(model, figure, [], current_value, visible=False)
 			figure.add_trace(
 				go.Scatter3d(
 					x=[stablePointVI(current_value)],
@@ -680,7 +678,7 @@ def display3D_phaseplane(
 	figure = go.Figure()
 	phaseplane3D(figure, model, numtick, i_max, v_min, v_max)
 	nullclineintersect3D(figure, v_min, v_max, i_max, numtick * 10, model)
-	integrate_near_bifurcation(model, figure, v_min, v_max, numtick)
+	# integrate_near_bifurcation(model, figure, v_min, v_max, numtick)
 	figure.update_layout(
 		scene=dict(
 			xaxis=dict(title='V [mV]'),  # range=[-5, 5]),
@@ -689,11 +687,12 @@ def display3D_phaseplane(
 		)
 	)
 	if save:
-		figure.write_html('PhasePlanFHN.html')
-	figure.show()
+		figure.write_html('figures/Q1/1b_PhasePlanFHN.html')
+	else:
+		figure.show()
 
 
-def display_eigenvalues_to_I(
+def Q1display_eigenvalues_to_I(
 		v_min: float,
 		v_max: float,
 		numtick: int,
@@ -806,13 +805,13 @@ def display_eigenvalues_to_I(
 		zerolinecolor='black'
 	)
 	if save:
-		figure.write_html('eigenvalueFHN.html')
+		figure.write_html('figures/Q1/1b_eigenvalueFHN.html')
 	else:
 		figure.show()
 
 
 def display_trajectories(
-		save: bool = False
+		save: bool = True
 ):
 	model = FHNModel()
 	figure = go.Figure()
@@ -826,8 +825,14 @@ def display_trajectories(
 		title_text='W [-]',
 	)
 	if save:
-		figure.write_html('orbitesFHN.html')
-	figure.show()
+		figure.write_html('figures/Q1/1a_orbitesFHN.html')
+	else:
+		figure.show()
+
+
+def bifurcation_diagram():
+	model = FHNModel()
+	model.display_bifurcation_diagram(np.linspace(0.5, 1.2, num=800), save=True)
 
 
 if __name__ == '__main__':
@@ -837,6 +842,6 @@ if __name__ == '__main__':
 	vmax = 3.5
 	# bifurcation_diagram()
 	# model.display_model_solution(None,I)
-	display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
+	# display_eigenvalues_to_I(vmin, vmax, 1000, i_max=7, save=True)
 	# display3D_phaseplane(imax, vmin, vmax, save=False)
 	display_trajectories(False)

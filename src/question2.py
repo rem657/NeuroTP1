@@ -1,5 +1,6 @@
 # -C_m dV_m/dt = g_K(V_M - E_K) + g_Na(V_M - E_Na) + g_L(V_M - E_L)
 import functools
+import os
 from typing import List, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -425,7 +426,7 @@ class HHModel(NeuroneModelDefault):
 		)
 		figure.update_layout(plot_layout)
 		if save:
-			figure.write_html('bifurcationHH.html')
+			figure.write_html('figures/Q2/bifurcationHH.html')
 
 
 def display_HHModel(I_inj: callable, t_init: float, t_end: float, t_inter: float):
@@ -503,9 +504,7 @@ def I_stairs(current_values: list):
 	return func
 
 
-def I_steps(current_values: list):
-	step_len = 75
-	inactive_len = 25
+def I_steps(current_values: list, step_len=75, inactive_len=25):
 
 	def func(t):
 		active = (t % (inactive_len + step_len)) > inactive_len
@@ -563,6 +562,8 @@ def display_eigenvalues_to_I(
 		save_name: str = "eigenvalues_HH.html",
 		show=False,
 ):
+	fig_folder = "figures/Q2/"
+	os.makedirs(fig_folder, exist_ok=True)
 	bifurcation_marker_size = 5
 	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
 	eigen_values, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)))
@@ -647,7 +648,7 @@ def display_eigenvalues_to_I(
 		yaxis=dict(title='Eigenvalue [-]')
 	)
 	if save:
-		figure.write_html(save_name)
+		figure.write_html(fig_folder+save_name)
 	if show:
 		figure.show()
 
@@ -661,6 +662,8 @@ def display_eigenvalues_phase(
 		save_name: str = "eigenvalues_phase_HH.html",
 		show=False,
 ):
+	fig_folder = "figures/Q2/"
+	os.makedirs(fig_folder, exist_ok=True)
 	bifurcation_marker_size = 5
 	[I, V, m, h, n] = model.get_fixed_point(v_min, v_max, numtick)
 	eigen_values_re, eigen_values_imag, _ = model.get_eigenvalues_at_fixed(list(zip(V, m, h, n)), re_imag=True)
@@ -750,12 +753,14 @@ def display_eigenvalues_phase(
 		showlegend=False,
 	)
 	if save:
-		figure.write_html(save_name)
+		figure.write_html(fig_folder+save_name)
 	if show:
 		figure.show()
 
 
 def show_potential_series(**kwargs):
+	fig_folder = "figures/Q2/"
+	os.makedirs(fig_folder, exist_ok=True)
 	I_burf = [9.77543932, 154.52243272]
 	kwargs.setdefault('k', 6)
 	nrows = kwargs['k']
@@ -776,9 +781,13 @@ def show_potential_series(**kwargs):
 	axes[-1, 0].set_xlabel("T [ms]")
 	axes[-1, 1].set_xlabel("T [ms]")
 	plt.tight_layout(pad=1.0)
-	plt.savefig("figures/q2a.png", dpi=300)
-	plt.show()
+	plt.savefig(f"{fig_folder}/q2a.png", dpi=300)
+	# plt.show()
 	plt.close(fig)
+
+
+def Q2Bifurcation_diagram(model: HHModel, max_current: float, resolution: int):
+	model.display_bifurcation_diagram( np.linspace(1, max_current, resolution))
 
 
 if __name__ == '__main__':
@@ -791,14 +800,9 @@ if __name__ == '__main__':
 	# vmin = -65
 	vmax = -40
 	model = HHModel(t_end=250.0)
-	# model.display_bifurcation_diagram(-100, -35, resolution=200)
-	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
+	Q2Bifurcation_diagram(model, np.linspace(1, 160, 1000))
+	display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=160, save=True)
 	display_eigenvalues_phase(HHModel(), vmin, vmax, numtick=10_000, save=True)
-	# show_potential_series()
-	# model.display_bifurcation_diagram(np.linspace(1, 170, 500))
-	# display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
-	# display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
-	model.display_bifurcation_diagram(np.linspace(1, 170, 500))
-    # display_eigenvalues_to_I(HHModel(), vmin, vmax, numtick=10_000, i_max=5, save=True)
-    # display_eigenvalues_phase(HHModel(), -100, 0, numtick=10_000, save=True)
+	show_potential_series()
+
 
